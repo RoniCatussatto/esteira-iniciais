@@ -3,6 +3,7 @@ import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { docConfigs } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { storageGetSignedUrl } from "./storage";
 
 const router = Router();
 
@@ -57,7 +58,7 @@ Ao final, quando o usuário confirmar a configuração, responda com um bloco JS
 
 // POST /api/doc-config-chat/stream
 // Body: { messages: [...], docConfigId?: number, arquivosModelo?: [{nome, url, mimeType}] }
-router.post("/stream", async (req, res) => {
+  router.post("/stream", async (req, res) => {
   const { messages, arquivosModelo } = req.body as {
     messages: Array<{ role: string; content: string | unknown[] }>;
     docConfigId?: number;
@@ -86,14 +87,56 @@ router.post("/stream", async (req, res) => {
     // Montar mensagens com suporte a arquivos modelo
     const systemMessage = { role: "system", content: SYSTEM_PROMPT };
 
-    // Adicionar contexto de arquivos modelo se houver
-    let contextMessage = null;
+    // Construir mensagem multimodal com os arquivos modelo reais
+    // A API suporta file_url para PDFs e image_url para imagens
+    let contextMessage: { role: string; content: unknown[] } | null = null;
     if (arquivosModelo && arquivosModelo.length > 0) {
-      const fileList = arquivosModelo.map(f => `- ${f.nome} (${f.mimeType || "arquivo"}): ${f.url}`).join("\n");
-      contextMessage = {
-        role: "user",
-        content: `[Arquivos modelo disponíveis para análise:\n${fileList}]`
-      };
+      const contentParts: unknown[] = [
+        {
+          type: "text",
+          text: `Abaixo estão ${arquivosModelo.length} arquivo(s) modelo do tipo de documento que estamos configurando. Analise o conteúdo real de cada um para identificar os padrões de dados, localização dos campos e possíveis variações de formato:`
+        }
+      ];
+
+      for (const arquivo of arquivosModelo) {
+        const mime = (arquivo.mimeType || "").toLowerCase();
+        const nome = arquivo.nome || "arquivo";
+        // Converter URL relativa /manus-storage/key em URL pública pré-assinada
+        let url = arquivo.url;
+        try {
+          if (url.startsWith("/manus-storage/")) {
+            const key = url.replace("/manus-storage/", "");
+            url = await storageGetSignedUrl(key);
+          }
+        } catch (e) {
+          console.warn(`[DocConfigChat] Não foi possível gerar URL pública para ${nome}:`, e);
+        }
+
+        // Adicionar label do arquivo
+        contentParts.push({ type: "text", text: `\n--- Arquivo: ${nome} ---` });
+
+        if (mime === "application/pdf" || nome.toLowerCase().endsWith(".pdf")) {
+          // PDF: usar file_url para a IA ler o conteúdo diretamente
+          contentParts.push({
+            type: "file_url",
+            file_url: { url, mime_type: "application/pdf" }
+          });
+        } else if (mime.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(nome)) {
+          // Imagem: usar image_url para visão multimodal
+          contentParts.push({
+            type: "image_url",
+            image_url: { url, detail: "high" }
+          });
+        } else {
+          // Outros tipos: informar URL para referência
+          contentParts.push({
+            type: "text",
+            text: `[Arquivo não-PDF/imagem: ${nome} — URL: ${url}]`
+          });
+        }
+      }
+
+      contextMessage = { role: "user", content: contentParts };
     }
 
     const allMessages = [

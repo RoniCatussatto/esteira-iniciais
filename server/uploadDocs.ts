@@ -218,3 +218,25 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
     return res.status(500).json({ error: message });
   }
 });
+
+/**
+ * POST /api/upload/docs/single-file
+ * Upload de um único arquivo (para arquivos modelo de configuração de extração).
+ * Retorna { url, key }.
+ */
+uploadDocsRouter.post("/single-file", upload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: "Nenhum arquivo enviado" });
+  }
+  try {
+    const ext = file.originalname.split(".").pop() || "bin";
+    const key = `modelos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { url } = await storagePut(key, file.buffer, file.mimetype || "application/octet-stream");
+    return res.json({ url, key, nome: file.originalname, mimeType: file.mimetype });
+  } catch (err: unknown) {
+    console.error("[UploadDocs/single-file] Erro:", err);
+    const message = err instanceof Error ? err.message : "Erro interno";
+    return res.status(500).json({ error: message });
+  }
+});

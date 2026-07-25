@@ -166,6 +166,18 @@ export const docConfigs = mysqlTable("docConfigs", {
   // Configuração de extração (campos e regras — preenchidos na etapa de configuração)
   configJson: text("configJson"),  // JSON com as regras de extração
   ativo: int("ativo").default(1).notNull(),
+  // Regras de identificação automática do documento
+  regrasIdentificacao: text("regrasIdentificacao"), // JSON: lista de palavras-chave/padrões no nome do arquivo
+  // Script de extração gerado pela IA
+  scriptExtracao: text("scriptExtracao"),           // código Python/JS para extrair dados
+  // Mapeamento dos campos extraídos → campos do sistema
+  mapeamentoCampos: text("mapeamentoCampos"),       // JSON: { dadoPlanilha01: "...", multa2pct: "...", ... }
+  // Histórico de conversa com a IA (para edições futuras)
+  historicoChat: text("historicoChat"),             // JSON: array de mensagens
+  // Arquivos modelo enviados pelo usuário
+  arquivosModelo: text("arquivosModelo"),           // JSON: array de { nome, url, key }
+  // Status da configuração
+  statusConfig: mysqlEnum("statusConfig", ["rascunho", "configurado", "testado"]).default("rascunho").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -34,7 +34,7 @@ import {
   ArrowLeft,
   Search,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 type Cliente = {
   id: number;
@@ -208,6 +208,7 @@ function ClienteCard({ cliente, onEdit, onDelete }: {
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const [, navigate] = useLocation();
   const [expanded, setExpanded] = useState(false);
   const docsQuery = trpc.docConfigs.getByCliente.useQuery(
     { clienteId: cliente.id },
@@ -323,7 +324,7 @@ function ClienteCard({ cliente, onEdit, onDelete }: {
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs"
-                onClick={() => toast.info("Em breve: configuração de novo documento")}
+                onClick={() => navigate(`/configuracoes/cliente/${cliente.id}/doc/novo`)}
               >
                 <Plus className="w-3 h-3 mr-1" />
                 Configurar novo documento
@@ -347,8 +348,16 @@ function ClienteCard({ cliente, onEdit, onDelete }: {
                       <span className="text-xs text-gray-400">{doc.descricao}</span>
                     )}
                     <Badge variant={doc.ativo ? "default" : "secondary"} className="text-xs">
-                      {doc.ativo ? "Ativo" : "Inativo"}
+                      {doc.statusConfig === "configurado" ? "Configurado" : doc.statusConfig === "testado" ? "Testado" : "Rascunho"}
                     </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-blue-400 hover:text-blue-600"
+                      onClick={() => navigate(`/configuracoes/cliente/${cliente.id}/doc/${doc.id}`)}
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600">
@@ -384,6 +393,7 @@ function ClienteCard({ cliente, onEdit, onDelete }: {
 }
 
 export default function ConfiguracoesPage() {
+  const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const { data: clientes = [], isLoading } = trpc.clientes.list.useQuery();
   const [search, setSearch] = useState("");

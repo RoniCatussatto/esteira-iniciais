@@ -76,6 +76,7 @@ export default function DocumentosPage() {
   } | null>(null);
   const [expandedDevedores, setExpandedDevedores] = useState<Set<number>>(new Set());
   const [addingToDevedor, setAddingToDevedor] = useState<number | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const addFileRef = useRef<HTMLInputElement>(null);
 
   const deleteMutation = trpc.documentos.delete.useMutation({
@@ -105,50 +106,35 @@ export default function DocumentosPage() {
   // Upload de múltiplas pastas via webkitdirectory
   const folderInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFolderUpload(fileList: FileList) {
-    if (!fileList || fileList.length === 0) return;
-
-    const files = Array.from(fileList);
+  // Função compartilhada que recebe lista de {file, pasta} e envia ao backend
+  async function handleFolderUploadFromEntries(collected: { file: File; pasta: string }[]) {
+    if (collected.length === 0) return;
     setUploading(true);
-    setUploadProgress({ atual: 0, total: files.length });
+    setUploadProgress({ atual: 0, total: collected.length });
     setUploadResultado(null);
-
     try {
       const formData = new FormData();
-      files.forEach((file, i) => {
+      collected.forEach(({ file, pasta }) => {
         formData.append("files", file);
-        // webkitRelativePath pode ser:
-        //   "JOAO VICTOR/CCB.pdf"          → selecionou a pasta do devedor diretamente
-        //   "Nova pasta/JOAO VICTOR/CCB.pdf" → selecionou a pasta raiz que contém as pastas dos devedores
-        // Em ambos os casos, o nome do devedor é sempre a pasta IMEDIATAMENTE PAI do arquivo,
-        // ou seja, o penúltimo segmento do path.
-        const parts = file.webkitRelativePath?.split("/") ?? [];
-        // penúltimo segmento = pasta pai direta do arquivo
-        const nomePasta = parts.length >= 2 ? parts[parts.length - 2] : file.name;
-        formData.append("nomePasta", nomePasta);
+        formData.append("nomePasta", pasta);
       });
-
-      setUploadProgress({ atual: files.length, total: files.length });
-
+      setUploadProgress({ atual: collected.length, total: collected.length });
       const response = await fetch(`/api/upload/docs/${loteId}`, {
         method: "POST",
         body: formData,
       });
-
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Erro no upload");
-
       setUploadResultado(result);
       toast.success(`${result.vinculados} arquivo(s) vinculado(s) com sucesso!`);
       if (result.semVinculo > 0) {
         toast.warning(`${result.semVinculo} arquivo(s) não foram vinculados a nenhum devedor.`);
       }
       refetchDocs();
-      // Expandir todos os devedores que receberam documentos
       const idsComDocs = new Set(
         (result.resultados as UploadResultado[])
-          .filter((r) => r.devedorId !== null)
-          .map((r) => r.devedorId as number)
+          .filter((r: UploadResultado) => r.devedorId !== null)
+          .map((r: UploadResultado) => r.devedorId as number)
       );
       setExpandedDevedores(idsComDocs);
     } catch (err: unknown) {
@@ -157,6 +143,19 @@ export default function DocumentosPage() {
       setUploading(false);
       setUploadProgress(null);
     }
+  }
+
+  async function handleFolderUpload(fileList: FileList) {
+    if (!fileList || fileList.length === 0) return;
+
+    // Converte FileList para o formato {file, pasta} usando webkitRelativePath
+    // O penúltimo segmento do path é sempre a pasta pai direta do arquivo (nome do devedor)
+    const collected = Array.from(fileList).map((file) => {
+      const parts = file.webkitRelativePath?.split("/") ?? [];
+      const pasta = parts.length >= 2 ? parts[parts.length - 2] : "";
+      return { file, pasta };
+    });
+    await handleFolderUploadFromEntries(collected);
   }
 
   // Upload individual para um devedor específico
@@ -236,26 +235,88 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Input oculto para seleção de pastas */}
+            {/* Dois inputs ocultos: um para selecionar PASTA (webkitdirectory), outro para selecionar ARQUIVOS */}
             <input
               ref={folderInputRef}
               type="file"
-              // @ts-ignore — atributo não-padrão suportado pelos navegadores modernos
+              // @ts-ignore
               webkitdirectory=""
               multiple
               className="hidden"
               onChange={(e) => e.target.files && handleFolderUpload(e.target.files)}
             />
 
+            {/* Drop zone com suporte real a drag-and-drop de pastas via FileSystemEntry API */}
             <div
-              className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors cursor-pointer
-                ${uploading ? "opacity-60 pointer-events-none border-gray-300" : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"}`}
+              className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors
+                ${uploading
+                  ? "opacity-60 pointer-events-none border-gray-300 bg-gray-50"
+                  : isDraggingOver
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-300 hover:border-blue-400 hover:bg-gray-50 cursor-pointer"
+                }`}
               onClick={() => !uploading && folderInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingOver(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setIsDraggingOver(false); }}
+              onDrop={async (e) => {
                 e.preventDefault();
-                // Drag-and-drop de pastas não é suportado universalmente; orientar o usuário
-                toast.info("Use o botão para selecionar as pastas.");
+                e.stopPropagation();
+                setIsDraggingOver(false);
+                if (uploading) return;
+                // Usa FileSystemEntry API para ler pastas arrastadas
+                const items = Array.from(e.dataTransfer.items);
+                const entries = items
+                  .map((item) => item.webkitGetAsEntry?.())
+                  .filter((entry): entry is FileSystemEntry => !!entry);
+                if (entries.length === 0) {
+                  toast.error("Nenhuma pasta detectada. Arraste as pastas dos devedores diretamente.");
+                  return;
+                }
+                // Lê recursivamente todos os arquivos das pastas
+                const collected: { file: File; pasta: string }[] = [];
+                async function readDir(dirEntry: FileSystemDirectoryEntry, pastaName: string) {
+                  return new Promise<void>((resolve) => {
+                    const reader = dirEntry.createReader();
+                    function readBatch() {
+                      reader.readEntries(async (entries) => {
+                        if (entries.length === 0) { resolve(); return; }
+                        for (const entry of entries) {
+                          if (entry.isFile) {
+                            await new Promise<void>((res) => {
+                              (entry as FileSystemFileEntry).file((f) => {
+                                collected.push({ file: f, pasta: pastaName });
+                                res();
+                              });
+                            });
+                          } else if (entry.isDirectory) {
+                            // Subpastas: usa a pasta pai como nome do devedor
+                            await readDir(entry as FileSystemDirectoryEntry, pastaName);
+                          }
+                        }
+                        readBatch();
+                      });
+                    }
+                    readBatch();
+                  });
+                }
+                for (const entry of entries) {
+                  if (entry.isDirectory) {
+                    await readDir(entry as FileSystemDirectoryEntry, entry.name);
+                  } else if (entry.isFile) {
+                    await new Promise<void>((res) => {
+                      (entry as FileSystemFileEntry).file((f) => {
+                        // Arquivo solto sem pasta — usa o nome do arquivo como pasta (sem vínculo)
+                        collected.push({ file: f, pasta: "" });
+                        res();
+                      });
+                    });
+                  }
+                }
+                if (collected.length === 0) {
+                  toast.error("Nenhum arquivo encontrado nas pastas arrastadas.");
+                  return;
+                }
+                await handleFolderUploadFromEntries(collected);
               }}
             >
               {uploading ? (
@@ -267,13 +328,18 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
                   </p>
                   <p className="text-sm text-gray-400">Aguarde, isso pode levar alguns instantes.</p>
                 </div>
+              ) : isDraggingOver ? (
+                <div className="flex flex-col items-center gap-3">
+                  <FolderOpen className="w-10 h-10 text-blue-500" />
+                  <p className="text-blue-700 font-medium">Solte as pastas aqui</p>
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-3">
                   <Upload className="w-10 h-10 text-gray-400" />
                   <div>
-                    <p className="text-gray-700 font-medium">Clique para selecionar as pastas</p>
+                    <p className="text-gray-700 font-medium">Arraste as pastas dos devedores aqui</p>
                     <p className="text-sm text-gray-400 mt-1">
-                      Selecione múltiplas pastas de uma vez. Cada pasta = um devedor.
+                      Ou clique para usar o seletor de pastas do sistema. Cada pasta = um devedor.
                     </p>
                   </div>
                 </div>

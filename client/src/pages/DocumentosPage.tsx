@@ -10,6 +10,7 @@ import {
   Trash2, Plus, ExternalLink, CheckCircle, AlertCircle, Upload,
   ChevronDown, ChevronRight,
 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -206,7 +207,7 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center gap-4">
+          <div className="max-w-6xl mx-auto flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate(`/lote/${loteId}`)} className="gap-2">
             <ArrowLeft className="w-4 h-4" /> Voltar aos Dados
           </Button>
@@ -218,6 +219,13 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
               Etapa 2 — Upload de Documentos · {totalDocs} arquivo(s) enviado(s)
             </p>
           </div>
+          <Button
+            size="sm"
+            onClick={() => navigate(`/lote/${loteId}/revisao`)}
+            className="gap-2 ml-auto"
+          >
+            Avançar — Revisar Dados <ArrowRight className="w-4 h-4" />
+          </Button>
         </div>
       </header>
 

@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -72,6 +72,13 @@ export const devedores = mysqlTable("devedores", {
   tipoInicial: varchar("tipoInicial", { length: 100 }),
   tipoPlanilha: varchar("tipoPlanilha", { length: 100 }),
   valorCausa: varchar("valorCausa", { length: 50 }),
+  // Campos de extração dos documentos (Etapa 3)
+  dadoPlanilha01: text("dadoPlanilha01"),
+  dadoPlanilha02: text("dadoPlanilha02"),
+  dadoPlanilha03: text("dadoPlanilha03"),
+  dadoPlanilha04: text("dadoPlanilha04"),
+  multa2pct: mysqlEnum("multa2pct", ["sim", "nao", "branco"]).default("branco"),
+  moraEspecifica: text("moraEspecifica"),
   status: mysqlEnum("status", ["pendente", "em_processamento", "concluido", "erro"]).default("pendente").notNull(),
   observacoes: text("observacoes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

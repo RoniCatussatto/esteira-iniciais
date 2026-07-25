@@ -53,3 +53,13 @@
 - [x] Clicar no documento abre em nova aba do navegador
 
 ## Etapa 3: Identificação do Tipo de Planilha e Inicial (futuro)
+
+## Etapa 3: Revisão Completa e Extração de Dados
+- [ ] Adicionar campos de extração na tabela `devedores`: dadoPlanilha01, dadoPlanilha02, dadoPlanilha03, dadoPlanilha04, multa2pct, moraEspecifica
+- [ ] Criar rota tRPC para salvar campos de extração de um devedor
+- [ ] Botão "Avançar — Revisar Dados" na tela de documentos (DocumentosPage)
+- [ ] Nova página RevisaoPage (/lote/:id/revisao) com lista de todos os devedores
+- [ ] Cada devedor expandível: dados BD + lista de docs + campos de extração editáveis
+- [ ] Campos: DadoPlanilha01-04, Multa 2% (Sim/Não/branco), Mora Específica (texto)
+- [ ] Salvar campos de extração por devedor (botão Salvar por devedor)
+- [ ] Indicador visual: devedores com campos preenchidos vs. pendentes

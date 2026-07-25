@@ -89,6 +89,21 @@ export const appRouter = router({
         const { id, ...data } = input;
         return updateDevedor(id, data);
       }),
+    // Salvar campos de extração dos documentos (Etapa 3)
+    saveExtraction: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        dadoPlanilha01: z.string().nullable().optional(),
+        dadoPlanilha02: z.string().nullable().optional(),
+        dadoPlanilha03: z.string().nullable().optional(),
+        dadoPlanilha04: z.string().nullable().optional(),
+        multa2pct: z.enum(["sim", "nao", "branco"]).optional(),
+        moraEspecifica: z.string().nullable().optional(),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        return updateDevedor(id, data);
+      }),
   }),
 });
 

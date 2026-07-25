@@ -40,3 +40,16 @@
 - [x] Botão "Limpar antigos" com confirmação na lista de lotes
 
 ## Etapa 2: Identificação do Tipo de Planilha e Inicial (futuro)
+## Etapa 2: Upload de Documentos por Devedor
+- [x] Adicionar tabela `documentos` no schema (id, loteId, devedorId, nome, fileKey, fileUrl, mimeType, tamanho, createdAt)
+- [x] Criar endpoint de upload de documentos no backend (multipart, múltiplos arquivos, com nome da pasta para vinculação)
+- [x] Implementar lógica de fuzzy matching: vincular pasta ao devedor pelo nome (tolerando variações)
+- [x] Botão "Avançar → Subir Documentos" na tela do lote (LotePage)
+- [x] Nova tela/página de upload de pastas (seleção múltipla de pastas via webkitdirectory)
+- [x] Exibir progresso do upload e resultado da vinculação (vinculados vs sem vínculo, com score de confiança)
+- [x] Página de revisão de documentos: listar documentos por devedor com ícone do tipo de arquivo
+- [x] Permitir excluir documento individual de um devedor (com confirmação)
+- [x] Permitir adicionar documento individual a um devedor específico
+- [x] Clicar no documento abre em nova aba do navegador
+
+## Etapa 3: Identificação do Tipo de Planilha e Inicial (futuro)

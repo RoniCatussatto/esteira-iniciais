@@ -80,3 +80,22 @@ export const devedores = mysqlTable("devedores", {
 
 export type Devedor = typeof devedores.$inferSelect;
 export type InsertDevedor = typeof devedores.$inferInsert;
+
+/**
+ * Documentos — arquivos enviados para cada devedor de um lote.
+ */
+export const documentos = mysqlTable("documentos", {
+  id: int("id").autoincrement().primaryKey(),
+  loteId: int("loteId").notNull(),
+  devedorId: int("devedorId").notNull(),
+  nomeArquivo: varchar("nomeArquivo", { length: 500 }).notNull(),
+  nomePasta: varchar("nomePasta", { length: 500 }),   // nome da pasta original do upload
+  fileKey: varchar("fileKey", { length: 1000 }).notNull(),
+  fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),
+  mimeType: varchar("mimeType", { length: 100 }),
+  tamanho: int("tamanho"),                             // bytes
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Documento = typeof documentos.$inferSelect;
+export type InsertDocumento = typeof documentos.$inferInsert;

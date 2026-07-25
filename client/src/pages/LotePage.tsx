@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, FileSpreadsheet, User, Car, MapPin, Loader2, CheckCircle, Clock } from "lucide-react";
+import { ArrowLeft, Pencil, FileSpreadsheet, Loader2, ChevronRight } from "lucide-react";
 
 type Devedor = {
   id: number;
@@ -126,6 +126,12 @@ export default function LotePage() {
           <Badge variant={lote.status === "concluido" ? "outline" : lote.status === "erro" ? "destructive" : "secondary"}>
             {lote.status === "aguardando" ? "Aguardando" : lote.status === "em_processamento" ? "Em processamento" : lote.status === "concluido" ? "Concluído" : "Erro"}
           </Badge>
+          <Button
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => navigate(`/lote/${loteId}/documentos`)}
+          >
+            Avançar — Subir Documentos <ChevronRight className="w-4 h-4" />
+          </Button>
         </div>
       </header>
 

@@ -1,6 +1,6 @@
 import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, lotes, devedores, InsertDevedor } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -175,4 +175,36 @@ export async function updateDevedor(id: number, data: Partial<InsertDevedor>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.update(devedores).set(data).where(eq(devedores.id, id));
+}
+
+// ─── Documentos ───────────────────────────────────────────────────────────────
+
+export async function createDocumento(data: InsertDocumento) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(documentos).values(data);
+}
+
+export async function getDocumentosByLote(loteId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(documentos).where(eq(documentos.loteId, loteId)).orderBy(documentos.devedorId, documentos.id);
+}
+
+export async function getDocumentosByDevedor(devedorId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(documentos).where(eq(documentos.devedorId, devedorId)).orderBy(documentos.id);
+}
+
+export async function deleteDocumento(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(documentos).where(eq(documentos.id, id));
+}
+
+export async function deleteDocumentosByLote(loteId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(documentos).where(eq(documentos.loteId, loteId));
 }

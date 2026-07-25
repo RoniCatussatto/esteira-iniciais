@@ -14,6 +14,11 @@ import {
   deleteLote,
   deleteLotesAntigos,
 } from "./db";
+import {
+  getDocumentosByLote,
+  getDocumentosByDevedor,
+  deleteDocumento,
+} from "./db";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -44,6 +49,17 @@ export const appRouter = router({
       .mutation(({ input }) => deleteLote(input.id)),
     limparAntigos: publicProcedure
       .mutation(() => deleteLotesAntigos()),
+  }),
+  documentos: router({
+    getByLote: publicProcedure
+      .input(z.object({ loteId: z.number() }))
+      .query(({ input }) => getDocumentosByLote(input.loteId)),
+    getByDevedor: publicProcedure
+      .input(z.object({ devedorId: z.number() }))
+      .query(({ input }) => getDocumentosByDevedor(input.devedorId)),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteDocumento(input.id)),
   }),
 
   devedores: router({

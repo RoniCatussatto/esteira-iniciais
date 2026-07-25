@@ -63,3 +63,11 @@
 - [ ] Campos: DadoPlanilha01-04, Multa 2% (Sim/Não/branco), Mora Específica (texto)
 - [ ] Salvar campos de extração por devedor (botão Salvar por devedor)
 - [ ] Indicador visual: devedores com campos preenchidos vs. pendentes
+
+## Melhoria Etapa 3: Campos de Extração por Contrato
+- [ ] Criar tabela `extracoes` no schema: id, devedorId, loteId, numeroContrato, dadoPlanilha01-04, multa2pct, moraEspecifica
+- [ ] Remover campos dadoPlanilha01-04, multa2pct, moraEspecifica da tabela devedores (ou manter como legado)
+- [ ] Criar rotas tRPC: listar extrações por devedor, criar extração, atualizar extração, excluir extração
+- [ ] Atualizar RevisaoPage: seção de extração mostra um card por contrato (pré-populado com os contratos do devedor)
+- [ ] Permitir adicionar novo contrato/extração e excluir contrato/extração individualmente
+- [ ] Multa 2% e Mora Específica são campos compartilhados do devedor (não por contrato) ou também por contrato?

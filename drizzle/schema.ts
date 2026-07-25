@@ -106,3 +106,25 @@ export const documentos = mysqlTable("documentos", {
 
 export type Documento = typeof documentos.$inferSelect;
 export type InsertDocumento = typeof documentos.$inferInsert;
+
+/**
+ * Extrações — campos extraídos dos documentos, um registro por contrato de cada devedor.
+ * Um devedor com 3 contratos terá 3 registros aqui.
+ */
+export const extracoes = mysqlTable("extracoes", {
+  id: int("id").autoincrement().primaryKey(),
+  devedorId: int("devedorId").notNull(),
+  loteId: int("loteId").notNull(),
+  numeroContrato: varchar("numeroContrato", { length: 100 }).notNull(),
+  dadoPlanilha01: text("dadoPlanilha01"),
+  dadoPlanilha02: text("dadoPlanilha02"),
+  dadoPlanilha03: text("dadoPlanilha03"),
+  dadoPlanilha04: text("dadoPlanilha04"),
+  multa2pct: mysqlEnum("multa2pct", ["sim", "nao", "branco"]).default("branco"),
+  moraEspecifica: text("moraEspecifica"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Extracao = typeof extracoes.$inferSelect;
+export type InsertExtracao = typeof extracoes.$inferInsert;

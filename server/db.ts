@@ -1,6 +1,6 @@
 import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -203,8 +203,61 @@ export async function deleteDocumento(id: number) {
   return db.delete(documentos).where(eq(documentos.id, id));
 }
 
-export async function deleteDocumentosByLote(loteId: number) {
+  export async function deleteDocumentosByLote(loteId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(documentos).where(eq(documentos.loteId, loteId));
+}
+
+// ─── Extrações ────────────────────────────────────────────────────────────────
+
+export async function getExtracoesByDevedor(devedorId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(extracoes).where(eq(extracoes.devedorId, devedorId)).orderBy(extracoes.id);
+}
+
+export async function getExtracoesByLote(loteId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(extracoes).where(eq(extracoes.loteId, loteId)).orderBy(extracoes.devedorId, extracoes.id);
+}
+
+export async function createExtracao(data: InsertExtracao) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(extracoes).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId ?? (result as unknown as { insertId: number }).insertId;
+  return db.select().from(extracoes).where(eq(extracoes.id, insertId)).limit(1).then(r => r[0]);
+}
+
+export async function updateExtracao(id: number, data: Partial<InsertExtracao>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(extracoes).set(data).where(eq(extracoes.id, id));
+  return db.select().from(extracoes).where(eq(extracoes.id, id)).limit(1).then(r => r[0]);
+}
+
+export async function deleteExtracao(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(extracoes).where(eq(extracoes.id, id));
+}
+
+export async function deleteExtracoesByLote(loteId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(extracoes).where(eq(extracoes.loteId, loteId));
+}
+
+/** Inicializa as extrações de um devedor a partir dos contratos separados por " / " */
+export async function initExtracoesByContratos(devedorId: number, loteId: number, contratosStr: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Verifica se já existem extrações para este devedor
+  const existing = await db.select().from(extracoes).where(eq(extracoes.devedorId, devedorId)).limit(1);
+  if (existing.length > 0) return; // já inicializado
+  const contratos = contratosStr.split(/\s*\/\s*/).map(c => c.trim()).filter(Boolean);
+  if (contratos.length === 0) return;
+  await db.insert(extracoes).values(contratos.map(c => ({ devedorId, loteId, numeroContrato: c })));
 }

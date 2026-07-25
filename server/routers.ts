@@ -19,6 +19,14 @@ import {
   getDocumentosByDevedor,
   deleteDocumento,
 } from "./db";
+import {
+  getExtracoesByDevedor,
+  getExtracoesByLote,
+  createExtracao,
+  updateExtracao,
+  deleteExtracao,
+  initExtracoesByContratos,
+} from "./db";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -104,6 +112,49 @@ export const appRouter = router({
         const { id, ...data } = input;
         return updateDevedor(id, data);
       }),
+  }),
+
+  extracoes: router({
+    getByDevedor: publicProcedure
+      .input(z.object({ devedorId: z.number() }))
+      .query(({ input }) => getExtracoesByDevedor(input.devedorId)),
+    getByLote: publicProcedure
+      .input(z.object({ loteId: z.number() }))
+      .query(({ input }) => getExtracoesByLote(input.loteId)),
+    init: publicProcedure
+      .input(z.object({ devedorId: z.number(), loteId: z.number(), contratos: z.string() }))
+      .mutation(({ input }) => initExtracoesByContratos(input.devedorId, input.loteId, input.contratos)),
+    create: publicProcedure
+      .input(z.object({
+        devedorId: z.number(),
+        loteId: z.number(),
+        numeroContrato: z.string(),
+        dadoPlanilha01: z.string().nullable().optional(),
+        dadoPlanilha02: z.string().nullable().optional(),
+        dadoPlanilha03: z.string().nullable().optional(),
+        dadoPlanilha04: z.string().nullable().optional(),
+        multa2pct: z.enum(["sim", "nao", "branco"]).optional(),
+        moraEspecifica: z.string().nullable().optional(),
+      }))
+      .mutation(({ input }) => createExtracao(input)),
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        numeroContrato: z.string().optional(),
+        dadoPlanilha01: z.string().nullable().optional(),
+        dadoPlanilha02: z.string().nullable().optional(),
+        dadoPlanilha03: z.string().nullable().optional(),
+        dadoPlanilha04: z.string().nullable().optional(),
+        multa2pct: z.enum(["sim", "nao", "branco"]).optional(),
+        moraEspecifica: z.string().nullable().optional(),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        return updateExtracao(id, data);
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteExtracao(input.id)),
   }),
 });
 

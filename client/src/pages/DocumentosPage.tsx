@@ -342,9 +342,12 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
                   return (
                     <div key={dev.id}>
                       {/* Linha do devedor */}
-                      <button
-                        className="w-full text-left flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors"
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="w-full text-left flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
                         onClick={() => toggleDevedor(dev.id)}
+                        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggleDevedor(dev.id)}
                       >
                         <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                           {idx + 1}
@@ -399,7 +402,7 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
                             <ChevronRight className="w-4 h-4 text-gray-400" />
                           )}
                         </div>
-                      </button>
+                      </div>
 
                       {/* Lista de documentos expandida */}
                       {isExpanded && (

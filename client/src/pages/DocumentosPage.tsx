@@ -341,67 +341,61 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
                   const isExpanded = expandedDevedores.has(dev.id);
                   return (
                     <div key={dev.id}>
-                      {/* Linha do devedor */}
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        className="w-full text-left flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
-                        onClick={() => toggleDevedor(dev.id)}
-                        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggleDevedor(dev.id)}
-                      >
-                        <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900">{dev.contrarioNome ?? "—"}</p>
-                          <p className="text-sm text-gray-500">CPF: {dev.contrarioCpf ?? "—"}</p>
-                        </div>
-                        <div className="flex items-center gap-3">
+                      {/* Linha do devedor — usa flex row com duas partes independentes */}
+                      <div className="flex items-center gap-2 px-6 py-4 hover:bg-gray-50 transition-colors">
+                        {/* Parte clicável (expandir/recolher) */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => toggleDevedor(dev.id)}
+                          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggleDevedor(dev.id)}
+                        >
+                          <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900">{dev.contrarioNome ?? "—"}</p>
+                            <p className="text-sm text-gray-500">CPF: {dev.contrarioCpf ?? "—"}</p>
+                          </div>
                           {docs.length > 0 ? (
-                            <Badge variant="outline" className="gap-1">
+                            <Badge variant="outline" className="gap-1 flex-shrink-0">
                               <FileText className="w-3 h-3" /> {docs.length} doc(s)
                             </Badge>
                           ) : (
-                            <Badge variant="secondary" className="text-gray-400">Sem documentos</Badge>
+                            <Badge variant="secondary" className="text-gray-400 flex-shrink-0">Sem documentos</Badge>
                           )}
-                          {/* Botão adicionar documento individual */}
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              type="file"
-                              multiple
-                              className="hidden"
-                              id={`add-doc-${dev.id}`}
-                              onChange={(e) => {
-                                if (e.target.files) handleAddDocToDevedor(dev.id, e.target.files);
-                                e.target.value = "";
-                              }}
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1.5"
-                              disabled={addingToDevedor === dev.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                document.getElementById(`add-doc-${dev.id}`)?.click();
-                              }}
-                            >
-                              {addingToDevedor === dev.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Plus className="w-3.5 h-3.5" />
-                              )}
-                              Adicionar
-                            </Button>
-                          </div>
                           {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                            <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
                           ) : (
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                            <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
                           )}
                         </div>
+                        {/* Botão adicionar — fora da área clicável, sem aninhamento */}
+                        <input
+                          type="file"
+                          multiple
+                          className="hidden"
+                          id={`add-doc-${dev.id}`}
+                          onChange={(e) => {
+                            if (e.target.files) handleAddDocToDevedor(dev.id, e.target.files);
+                            e.target.value = "";
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 flex-shrink-0"
+                          disabled={addingToDevedor === dev.id}
+                          onClick={() => document.getElementById(`add-doc-${dev.id}`)?.click()}
+                        >
+                          {addingToDevedor === dev.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="w-3.5 h-3.5" />
+                          )}
+                          Adicionar
+                        </Button>
                       </div>
 
                       {/* Lista de documentos expandida */}
@@ -419,8 +413,8 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
                                   className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white transition-colors group"
                                 >
                                   {fileIcon(doc.mimeType, doc.nomeArquivo)}
-                                  <button
-                                    className="flex-1 min-w-0 text-left"
+                                  <div
+                                    className="flex-1 min-w-0 cursor-pointer"
                                     onClick={() => window.open(doc.fileUrl, "_blank")}
                                   >
                                     <span className="text-sm text-blue-700 hover:underline truncate block">
@@ -429,7 +423,7 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
                                     {doc.tamanho && (
                                       <span className="text-xs text-gray-400">{formatBytes(doc.tamanho)}</span>
                                     )}
-                                  </button>
+                                  </div>
                                   <ExternalLink
                                     className="w-3.5 h-3.5 text-gray-400 hover:text-blue-600 cursor-pointer flex-shrink-0"
                                     onClick={() => window.open(doc.fileUrl, "_blank")}

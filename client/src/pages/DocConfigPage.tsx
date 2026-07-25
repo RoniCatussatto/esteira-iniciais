@@ -173,6 +173,7 @@ export default function DocConfigPage() {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let streamDone = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -194,11 +195,27 @@ export default function DocConfigPage() {
                   return updated;
                 });
               }
-              if (parsed.done) break;
+              if (parsed.done) {
+                // Usar o fullContent do servidor (mais confiável que o acumulado no cliente)
+                if (parsed.fullContent) {
+                  fullContent = parsed.fullContent;
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { role: "assistant", content: fullContent };
+                    return updated;
+                  });
+                }
+                streamDone = true;
+              }
               if (parsed.error) throw new Error(parsed.error);
-            } catch { /* ignorar */ }
+            } catch (parseErr) {
+              // Ignorar erros de parse de chunks individuais, mas logar para debug
+              if (parseErr instanceof SyntaxError) { /* chunk incompleto, normal */ }
+              else throw parseErr;
+            }
           }
         }
+        if (streamDone) break;
       }
 
       // Verificar se a resposta contém CONFIG_FINAL
@@ -207,7 +224,7 @@ export default function DocConfigPage() {
         try {
           const configData = JSON.parse(configMatch[1]);
           // Salvar configuração automaticamente
-          await fetch("/api/doc-config-chat/save-config", {
+          const saveResp = await fetch("/api/doc-config-chat/save-config", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -220,10 +237,19 @@ export default function DocConfigPage() {
               statusConfig: "configurado",
             }),
           });
-          setConfigSalva(true);
-          utils.docConfigs.getByCliente.invalidate({ clienteId: parseInt(clienteId) });
-          toast.success("Configuração salva automaticamente!");
-        } catch { /* ignorar erro de parse */ }
+          if (saveResp.ok) {
+            setConfigSalva(true);
+            utils.docConfigs.getByCliente.invalidate({ clienteId: parseInt(clienteId) });
+            toast.success("Configuração salva automaticamente!");
+          } else {
+            const errText = await saveResp.text();
+            console.error("[DocConfigPage] Erro ao salvar configuração:", saveResp.status, errText);
+            toast.error("Erro ao salvar configuração: " + saveResp.status);
+          }
+        } catch (saveErr) {
+          console.error("[DocConfigPage] Exceção ao salvar configuração:", saveErr);
+          toast.error("Erro ao salvar configuração");
+        }
       }
 
       // Salvar histórico do chat

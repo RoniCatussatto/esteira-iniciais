@@ -28,6 +28,18 @@ import {
   initExtracoesByContratos,
 } from "./db";
 
+import {
+  getAllClientes,
+  getClienteById,
+  createCliente,
+  updateCliente,
+  deleteCliente,
+  getDocConfigsByCliente,
+  getDocConfigById,
+  createDocConfig,
+  updateDocConfig,
+  deleteDocConfig,
+} from "./db";
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -155,6 +167,84 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => deleteExtracao(input.id)),
+  }),
+
+  clientes: router({
+    list: publicProcedure.query(() => getAllClientes()),
+    getById: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(({ input }) => getClienteById(input.id)),
+    create: publicProcedure
+      .input(z.object({
+        nomeFantasia: z.string(),
+        nomeCompleto: z.string().nullable().optional(),
+        doc: z.string().nullable().optional(),
+        telefone: z.string().nullable().optional(),
+        logradouro: z.string().nullable().optional(),
+        numero: z.string().nullable().optional(),
+        complemento: z.string().nullable().optional(),
+        cep: z.string().nullable().optional(),
+        uf: z.string().nullable().optional(),
+        municipio: z.string().nullable().optional(),
+        paragrafaInicial: z.string().nullable().optional(),
+        enderecoCoop: z.string().nullable().optional(),
+      }))
+      .mutation(({ input }) => createCliente(input)),
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        nomeFantasia: z.string().optional(),
+        nomeCompleto: z.string().nullable().optional(),
+        doc: z.string().nullable().optional(),
+        telefone: z.string().nullable().optional(),
+        logradouro: z.string().nullable().optional(),
+        numero: z.string().nullable().optional(),
+        complemento: z.string().nullable().optional(),
+        cep: z.string().nullable().optional(),
+        uf: z.string().nullable().optional(),
+        municipio: z.string().nullable().optional(),
+        paragrafaInicial: z.string().nullable().optional(),
+        enderecoCoop: z.string().nullable().optional(),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        return updateCliente(id, data);
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteCliente(input.id)),
+  }),
+
+  docConfigs: router({
+    getByCliente: publicProcedure
+      .input(z.object({ clienteId: z.number() }))
+      .query(({ input }) => getDocConfigsByCliente(input.clienteId)),
+    getById: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(({ input }) => getDocConfigById(input.id)),
+    create: publicProcedure
+      .input(z.object({
+        clienteId: z.number(),
+        nomeDocumento: z.string(),
+        descricao: z.string().nullable().optional(),
+        configJson: z.string().nullable().optional(),
+      }))
+      .mutation(({ input }) => createDocConfig(input)),
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        nomeDocumento: z.string().optional(),
+        descricao: z.string().nullable().optional(),
+        configJson: z.string().nullable().optional(),
+        ativo: z.number().optional(),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        return updateDocConfig(id, data);
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteDocConfig(input.id)),
   }),
 });
 

@@ -8,7 +8,7 @@ import Home from "./pages/Home";
 import LotePage from "./pages/LotePage";
 import DocumentosPage from "./pages/DocumentosPage";
 import RevisaoPage from "./pages/RevisaoPage";
-
+import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -17,6 +17,7 @@ function Router() {
       <Route path={"/lote/:id"} component={LotePage} />
       <Route path={"/lote/:id/documentos"} component={DocumentosPage} />
       <Route path={"/lote/:id/revisao"} component={RevisaoPage} />
+      <Route path={"/configuracoes"} component={ConfiguracoesPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

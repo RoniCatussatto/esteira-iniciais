@@ -9,6 +9,8 @@ import {
   Upload, FileSpreadsheet, Clock, CheckCircle, AlertCircle,
   ChevronRight, Loader2, ChevronLeft, Trash2, AlertTriangle,
 } from "lucide-react";
+import { Building2 } from "lucide-react";
+import { Link } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -108,6 +110,14 @@ export default function Home() {
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Iniciais Calc</h1>
             <p className="text-sm text-gray-500">Sistema de Elaboração de Planilhas e Petições Iniciais</p>
+          </div>
+          <div className="ml-auto">
+            <Link href="/configuracoes">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Building2 className="w-4 h-4" />
+                Configurações
+              </Button>
+            </Link>
           </div>
         </div>
       </header>

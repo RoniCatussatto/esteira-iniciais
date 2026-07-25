@@ -1,6 +1,6 @@
 import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -260,4 +260,72 @@ export async function initExtracoesByContratos(devedorId: number, loteId: number
   const contratos = contratosStr.split(/\s*\/\s*/).map(c => c.trim()).filter(Boolean);
   if (contratos.length === 0) return;
   await db.insert(extracoes).values(contratos.map(c => ({ devedorId, loteId, numeroContrato: c })));
+}
+
+// ─── Clientes ─────────────────────────────────────────────────────────────────
+
+export async function getAllClientes() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(clientes).orderBy(clientes.nomeFantasia);
+}
+
+export async function getClienteById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(clientes).where(eq(clientes.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createCliente(data: InsertCliente) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(clientes).values(data);
+}
+
+export async function updateCliente(id: number, data: Partial<InsertCliente>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(clientes).set(data).where(eq(clientes.id, id));
+}
+
+export async function deleteCliente(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(clientes).where(eq(clientes.id, id));
+}
+
+// ─── DocConfigs ───────────────────────────────────────────────────────────────
+
+export async function getDocConfigsByCliente(clienteId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(docConfigs).where(eq(docConfigs.clienteId, clienteId)).orderBy(docConfigs.nomeDocumento);
+}
+
+export async function getDocConfigById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(docConfigs).where(eq(docConfigs.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createDocConfig(data: InsertDocConfig) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(docConfigs).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId ?? (result as unknown as { insertId: number }).insertId;
+  return db.select().from(docConfigs).where(eq(docConfigs.id, insertId)).limit(1).then(r => r[0]);
+}
+
+export async function updateDocConfig(id: number, data: Partial<InsertDocConfig>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(docConfigs).set(data).where(eq(docConfigs.id, id));
+}
+
+export async function deleteDocConfig(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(docConfigs).where(eq(docConfigs.id, id));
 }

@@ -128,3 +128,47 @@ export const extracoes = mysqlTable("extracoes", {
 
 export type Extracao = typeof extracoes.$inferSelect;
 export type InsertExtracao = typeof extracoes.$inferInsert;
+
+/**
+ * Clientes — empresas/cooperativas que são autoras das ações.
+ * Pré-populada via seed a partir do JSON de clientes.
+ */
+export const clientes = mysqlTable("clientes", {
+  id: int("id").autoincrement().primaryKey(),
+  nomeFantasia: varchar("nomeFantasia", { length: 255 }).notNull().unique(), // chave de identificação (ex: "SICOOB COOPEREMB")
+  nomeCompleto: text("nomeCompleto"),
+  doc: varchar("doc", { length: 30 }),          // CNPJ
+  telefone: varchar("telefone", { length: 30 }),
+  logradouro: varchar("logradouro", { length: 255 }),
+  numero: varchar("numero", { length: 50 }),
+  complemento: varchar("complemento", { length: 255 }),
+  cep: varchar("cep", { length: 20 }),
+  uf: varchar("uf", { length: 5 }),
+  municipio: varchar("municipio", { length: 255 }),
+  paragrafaInicial: text("paragrafaInicial"),
+  enderecoCoop: text("enderecoCoop"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Cliente = typeof clientes.$inferSelect;
+export type InsertCliente = typeof clientes.$inferInsert;
+
+/**
+ * DocConfigs — configurações de extração de dados por tipo de documento e por cliente.
+ * Cada registro representa um tipo de documento configurado para uma cliente específica.
+ */
+export const docConfigs = mysqlTable("docConfigs", {
+  id: int("id").autoincrement().primaryKey(),
+  clienteId: int("clienteId").notNull(),
+  nomeDocumento: varchar("nomeDocumento", { length: 255 }).notNull(), // ex: "CCB", "Fatura", "Extrato Sisbr"
+  descricao: text("descricao"),
+  // Configuração de extração (campos e regras — preenchidos na etapa de configuração)
+  configJson: text("configJson"),  // JSON com as regras de extração
+  ativo: int("ativo").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DocConfig = typeof docConfigs.$inferSelect;
+export type InsertDocConfig = typeof docConfigs.$inferInsert;

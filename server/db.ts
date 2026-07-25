@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -90,3 +90,60 @@ export async function getUserByOpenId(openId: string) {
 }
 
 // TODO: add feature queries here as your schema grows.
+// TODO: add feature queries here as your schema grows.
+
+// ─── Lotes ────────────────────────────────────────────────────────────────────
+
+export async function createLote(data: { nome: string; dataBordero?: string; cooperativa?: string; totalDevedores: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(lotes).values(data);
+  return result;
+}
+
+export async function getLotes() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(lotes).orderBy(lotes.createdAt);
+}
+
+export async function getLoteById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(lotes).where(eq(lotes.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function updateLoteStatus(id: number, status: "aguardando" | "em_processamento" | "concluido" | "erro") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(lotes).set({ status }).where(eq(lotes.id, id));
+}
+
+// ─── Devedores ────────────────────────────────────────────────────────────────
+
+export async function createDevedores(data: InsertDevedor[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.length === 0) return;
+  return db.insert(devedores).values(data);
+}
+
+export async function getDevedoresByLote(loteId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(devedores).where(eq(devedores.loteId, loteId)).orderBy(devedores.id);
+}
+
+export async function getDevedorById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(devedores).where(eq(devedores.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function updateDevedor(id: number, data: Partial<InsertDevedor>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(devedores).set(data).where(eq(devedores.id, id));
+}

@@ -1,7 +1,15 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import {
+  getLotes,
+  getLoteById,
+  getDevedoresByLote,
+  getDevedorById,
+  updateDevedor,
+} from "./db";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -17,12 +25,44 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  lotes: router({
+    list: publicProcedure.query(() => getLotes()),
+    getById: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(({ input }) => getLoteById(input.id)),
+    getDevedores: publicProcedure
+      .input(z.object({ loteId: z.number() }))
+      .query(({ input }) => getDevedoresByLote(input.loteId)),
+  }),
+
+  devedores: router({
+    getById: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(({ input }) => getDevedorById(input.id)),
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        contrarioNome: z.string().optional(),
+        contrarioCpf: z.string().optional(),
+        contrarioEndereco: z.string().optional(),
+        foro: z.string().optional(),
+        contratos: z.string().optional(),
+        valorBordero: z.string().optional(),
+        vencBordero: z.string().optional(),
+        veiculoModelo: z.string().nullable().optional(),
+        veiculoAno: z.string().nullable().optional(),
+        veiculoPlaca: z.string().nullable().optional(),
+        veiculoRenavam: z.string().nullable().optional(),
+        veiculoChassis: z.string().nullable().optional(),
+        tipoInicial: z.string().nullable().optional(),
+        tipoPlanilha: z.string().nullable().optional(),
+        observacoes: z.string().nullable().optional(),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        return updateDevedor(id, data);
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

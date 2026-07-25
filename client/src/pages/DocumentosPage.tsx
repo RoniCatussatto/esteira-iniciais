@@ -117,9 +117,14 @@ export default function DocumentosPage() {
       const formData = new FormData();
       files.forEach((file, i) => {
         formData.append("files", file);
-        // webkitRelativePath = "NomePasta/arquivo.pdf"
+        // webkitRelativePath pode ser:
+        //   "JOAO VICTOR/CCB.pdf"          → selecionou a pasta do devedor diretamente
+        //   "Nova pasta/JOAO VICTOR/CCB.pdf" → selecionou a pasta raiz que contém as pastas dos devedores
+        // Em ambos os casos, o nome do devedor é sempre a pasta IMEDIATAMENTE PAI do arquivo,
+        // ou seja, o penúltimo segmento do path.
         const parts = file.webkitRelativePath?.split("/") ?? [];
-        const nomePasta = parts.length >= 2 ? parts[0] : file.name;
+        // penúltimo segmento = pasta pai direta do arquivo
+        const nomePasta = parts.length >= 2 ? parts[parts.length - 2] : file.name;
         formData.append("nomePasta", nomePasta);
       });
 

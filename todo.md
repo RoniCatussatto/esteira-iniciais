@@ -71,3 +71,23 @@
 - [ ] Atualizar RevisaoPage: seção de extração mostra um card por contrato (pré-populado com os contratos do devedor)
 - [ ] Permitir adicionar novo contrato/extração e excluir contrato/extração individualmente
 - [ ] Multa 2% e Mora Específica são campos compartilhados do devedor (não por contrato) ou também por contrato?
+
+## Módulo Configurações (Clientes + DocConfigs)
+- [x] Criar tabelas `clientes` e `docConfigs` no schema
+- [x] Seed com 46 clientes do JSON
+- [x] Rotas tRPC para CRUD de clientes e docConfigs
+- [x] ConfiguracoesPage: lista de clientes com busca, expand para ver documentos configurados
+- [x] DocConfigPage: chat com IA (SSE streaming) para configurar regras de extração
+- [x] Upload de arquivos modelo para a IA analisar (PDFs/imagens)
+- [x] Auto-salvar CONFIG_FINAL quando IA emite o bloco JSON
+- [x] Histórico de chat persistido no banco
+- [x] Corrigir erro de sintaxe em docConfigChat.ts (backtick em template literal)
+
+## Extração Automática de Dados dos Documentos
+- [x] Criar módulo extractor.ts: identificar tipo de documento e extrair campos via regex
+- [x] Integrar extração automática ao upload de documentos (endpoint batch e direto)
+- [x] Adicionar botão "Extrair Dados" na RevisaoPage por devedor
+- [x] Rota tRPC documentos.extrairDevedor para disparar extração manual
+- [x] Corrigir toast "undefined arquivo(s)" no upload individual
+- [ ] Testar extração com documentos reais configurados
+- [ ] Adicionar feedback visual na RevisaoPage mostrando qual documento foi identificado

@@ -9,6 +9,7 @@ import {
   getDevedorById,
   updateDevedor,
 } from "./db";
+import { processarDocumentoUploadado } from "./extractor";
 import {
   getLotesPaginados,
   deleteLote,
@@ -80,6 +81,28 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => deleteDocumento(input.id)),
+    // Disparar extração automática para todos os documentos de um devedor
+    extrairDevedor: publicProcedure
+      .input(z.object({ devedorId: z.number(), loteId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { devedorId, loteId } = input;
+        const docs = await getDocumentosByDevedor(devedorId);
+        const lote = await getLoteById(loteId);
+        if (!lote?.cooperativa) return { extraidos: 0, erro: "Cooperativa não encontrada no lote" };
+        let extraidos = 0;
+        for (const doc of docs) {
+          const resultado = await processarDocumentoUploadado({
+            fileKey: doc.fileKey,
+            nomeArquivo: doc.nomeArquivo,
+            mimeType: doc.mimeType,
+            devedorId,
+            loteId,
+            cooperativa: lote.cooperativa,
+          });
+          if (resultado) extraidos++;
+        }
+        return { extraidos };
+      }),
   }),
 
   devedores: router({

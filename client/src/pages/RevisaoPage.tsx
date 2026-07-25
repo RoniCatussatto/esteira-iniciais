@@ -13,6 +13,7 @@ import {
   FileText, FileImage, CheckCircle, Clock, Save, Loader2,
   User, Car, FileCheck, Plus, Trash2,
 } from "lucide-react";
+import { Wand2 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -192,6 +193,19 @@ function DevedorCard({
     onSuccess: () => { onChanged(); },
     onError: (e) => toast.error("Erro ao inicializar contratos: " + e.message),
   });
+  const extrairMut = trpc.documentos.extrairDevedor.useMutation({
+    onSuccess: (data) => {
+      if (data.extraidos > 0) {
+        toast.success(`${data.extraidos} documento(s) extraído(s) com sucesso!`);
+        onChanged();
+      } else if (data.erro) {
+        toast.warning(data.erro);
+      } else {
+        toast.info("Nenhum documento identificado pelas regras configuradas.");
+      }
+    },
+    onError: (e) => toast.error("Erro na extração: " + e.message),
+  });
 
   function handleExpand() {
     if (!expanded && extracoes.length === 0 && dev.contratos) {
@@ -304,13 +318,28 @@ function DevedorCard({
               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
                 Dados Extraídos dos Documentos — por Contrato
               </h4>
-              <Button
-                variant="outline" size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={() => setAddingContrato(v => !v)}
-              >
-                <Plus className="w-3 h-3" /> Adicionar contrato
-              </Button>
+              <div className="flex items-center gap-2">
+                {docs.length > 0 && (
+                  <Button
+                    variant="outline" size="sm"
+                    className="h-7 text-xs gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50"
+                    disabled={extrairMut.isPending}
+                    onClick={() => extrairMut.mutate({ devedorId: dev.id, loteId: dev.loteId })}
+                  >
+                    {extrairMut.isPending
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Wand2 className="w-3 h-3" />}
+                    Extrair Dados
+                  </Button>
+                )}
+                <Button
+                  variant="outline" size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => setAddingContrato(v => !v)}
+                >
+                  <Plus className="w-3 h-3" /> Adicionar contrato
+                </Button>
+              </div>
             </div>
 
             {/* Formulário para novo contrato */}

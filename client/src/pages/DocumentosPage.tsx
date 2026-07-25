@@ -175,7 +175,8 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
     });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Erro no upload");
-      toast.success(`${result.vinculados} arquivo(s) adicionado(s)!`);
+      const qtd = result.adicionados?.length ?? result.vinculados ?? 0;
+      toast.success(`${qtd} arquivo(s) adicionado(s)!`);
       refetchDocs();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Erro ao adicionar arquivo");

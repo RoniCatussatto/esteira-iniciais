@@ -222,7 +222,10 @@ export default function DocConfigPage() {
       const configMatch = fullContent.match(/<CONFIG_FINAL>([\s\S]*?)<\/CONFIG_FINAL>/);
       if (configMatch) {
         try {
-          const configData = JSON.parse(configMatch[1]);
+          // Remover blocos de código markdown (```json ... ``` ou ``` ... ```) antes do parse
+          let rawJson = configMatch[1].trim();
+          rawJson = rawJson.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+          const configData = JSON.parse(rawJson);
           // Salvar configuração automaticamente
           const saveResp = await fetch("/api/doc-config-chat/save-config", {
             method: "POST",

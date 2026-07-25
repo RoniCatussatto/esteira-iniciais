@@ -54,7 +54,7 @@ Quando tiver informações suficientes, gere uma configuração JSON estruturada
 
 Seja objetivo, prático e faça perguntas específicas para entender o documento. Se o usuário enviar arquivos modelo, analise-os para identificar os padrões de extração.
 
-Ao final, quando o usuário confirmar a configuração, responda com um bloco JSON entre as tags <CONFIG_FINAL> e </CONFIG_FINAL> contendo a configuração completa.`;
+Ao final, quando o usuário confirmar a configuração, responda com um bloco JSON entre as tags <CONFIG_FINAL> e </CONFIG_FINAL> contendo a configuração completa. IMPORTANTE: dentro das tags <CONFIG_FINAL> e </CONFIG_FINAL>, coloque APENAS o JSON puro, sem blocos de código markdown (\`\`\`json ou \`\`\`), sem texto adicional — apenas o objeto JSON diretamente.`;
 
 // POST /api/doc-config-chat/stream
 // Body: { messages: [...], docConfigId?: number, arquivosModelo?: [{nome, url, mimeType}] }

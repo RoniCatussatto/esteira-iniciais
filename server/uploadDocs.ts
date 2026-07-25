@@ -97,6 +97,23 @@ function matchDevedorPorPasta(
  * POST /api/upload/docs/:loteId/devedor/:devedorId
  * Upload direto para um devedor específico — sem fuzzy matching.
  */
+uploadDocsRouter.post("/single-file", upload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: "Nenhum arquivo enviado" });
+  }
+  try {
+    const ext = file.originalname.split(".").pop() || "bin";
+    const key = `modelos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { url } = await storagePut(key, file.buffer, file.mimetype || "application/octet-stream");
+    return res.json({ url, key, nome: file.originalname, mimeType: file.mimetype });
+  } catch (err: unknown) {
+    console.error("[UploadDocs/single-file] Erro:", err);
+    const message = err instanceof Error ? err.message : "Erro interno";
+    return res.status(500).json({ error: message });
+  }
+});
+
 uploadDocsRouter.post("/:loteId/devedor/:devedorId", upload.array("files", 100), async (req, res) => {
   try {
     const loteId = parseInt(req.params.loteId);
@@ -224,19 +241,3 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
  * Upload de um único arquivo (para arquivos modelo de configuração de extração).
  * Retorna { url, key }.
  */
-uploadDocsRouter.post("/single-file", upload.single("file"), async (req, res) => {
-  const file = req.file;
-  if (!file) {
-    return res.status(400).json({ error: "Nenhum arquivo enviado" });
-  }
-  try {
-    const ext = file.originalname.split(".").pop() || "bin";
-    const key = `modelos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { url } = await storagePut(key, file.buffer, file.mimetype || "application/octet-stream");
-    return res.json({ url, key, nome: file.originalname, mimeType: file.mimetype });
-  } catch (err: unknown) {
-    console.error("[UploadDocs/single-file] Erro:", err);
-    const message = err instanceof Error ? err.message : "Erro interno";
-    return res.status(500).json({ error: message });
-  }
-});

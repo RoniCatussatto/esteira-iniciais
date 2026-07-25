@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, lotes, devedores, InsertDevedor } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -89,9 +89,6 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
-// TODO: add feature queries here as your schema grows.
-
 // ─── Lotes ────────────────────────────────────────────────────────────────────
 
 export async function createLote(data: { nome: string; dataBordero?: string; cooperativa?: string; totalDevedores: number }) {
@@ -101,10 +98,16 @@ export async function createLote(data: { nome: string; dataBordero?: string; coo
   return result;
 }
 
-export async function getLotes() {
+/** Retorna lotes paginados (mais recentes primeiro) e o total de registros. */
+export async function getLotesPaginados(page: number, pageSize: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(lotes).orderBy(lotes.createdAt);
+  const offset = (page - 1) * pageSize;
+  const [rows, totalRows] = await Promise.all([
+    db.select().from(lotes).orderBy(desc(lotes.createdAt)).limit(pageSize).offset(offset),
+    db.select({ total: count() }).from(lotes),
+  ]);
+  return { lotes: rows, total: totalRows[0]?.total ?? 0 };
 }
 
 export async function getLoteById(id: number) {
@@ -118,6 +121,32 @@ export async function updateLoteStatus(id: number, status: "aguardando" | "em_pr
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.update(lotes).set({ status }).where(eq(lotes.id, id));
+}
+
+/** Exclui um lote e todos os devedores vinculados. */
+export async function deleteLote(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(devedores).where(eq(devedores.loteId, id));
+  await db.delete(lotes).where(eq(lotes.id, id));
+}
+
+/** Exclui lotes criados há mais de 30 dias (e seus devedores). Retorna quantos foram excluídos. */
+export async function deleteLotesAntigos(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const limite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  // Buscar IDs dos lotes antigos
+  const antigos = await db.select({ id: lotes.id }).from(lotes).where(lt(lotes.createdAt, limite));
+  if (antigos.length === 0) return 0;
+  for (const lote of antigos) {
+    await db.delete(devedores).where(eq(devedores.loteId, lote.id));
+  }
+  const ids = antigos.map((l) => l.id);
+  for (const id of ids) {
+    await db.delete(lotes).where(eq(lotes.id, id));
+  }
+  return antigos.length;
 }
 
 // ─── Devedores ────────────────────────────────────────────────────────────────

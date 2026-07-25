@@ -34,3 +34,9 @@
 - [ ] Empacotar todos os 5 arquivos por devedor (xlsx, pdf planilha, jpg planilha, docx, pdf inicial)
 - [ ] Gerar ZIP do lote completo para download único
 - [ ] Histórico de lotes processados
+## Melhorias da Etapa 1
+- [x] Paginação na lista de lotes (10 por página)
+- [x] Exclusão automática de lotes com mais de 30 dias via job agendado diário (03h UTC) + botão manual
+- [x] Botão "Limpar antigos" com confirmação na lista de lotes
+
+## Etapa 2: Identificação do Tipo de Planilha e Inicial (futuro)

@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { uploadRouter } from "../upload";
+import { scheduledRouter } from "../scheduledJobs";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -39,6 +40,8 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Upload routes (multipart/form-data)
   app.use("/api/upload", uploadRouter);
+  // Scheduled jobs (Heartbeat callbacks — must be before tRPC)
+  app.use("/api/scheduled", scheduledRouter);
   // tRPC API
   app.use(
     "/api/trpc",

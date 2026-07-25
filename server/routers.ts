@@ -4,11 +4,15 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import {
-  getLotes,
   getLoteById,
   getDevedoresByLote,
   getDevedorById,
   updateDevedor,
+} from "./db";
+import {
+  getLotesPaginados,
+  deleteLote,
+  deleteLotesAntigos,
 } from "./db";
 
 export const appRouter = router({
@@ -26,13 +30,20 @@ export const appRouter = router({
   }),
 
   lotes: router({
-    list: publicProcedure.query(() => getLotes()),
+    list: publicProcedure
+      .input(z.object({ page: z.number().min(1).default(1), pageSize: z.number().min(1).max(100).default(10) }))
+      .query(({ input }) => getLotesPaginados(input.page, input.pageSize)),
     getById: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(({ input }) => getLoteById(input.id)),
     getDevedores: publicProcedure
       .input(z.object({ loteId: z.number() }))
       .query(({ input }) => getDevedoresByLote(input.loteId)),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteLote(input.id)),
+    limparAntigos: publicProcedure
+      .mutation(() => deleteLotesAntigos()),
   }),
 
   devedores: router({

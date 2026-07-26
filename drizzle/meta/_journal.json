@@ -50,6 +50,13 @@
       "when": 1785018282844,
       "tag": "0006_secret_photon",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1785030936534,
+      "tag": "0007_mysterious_talkback",
+      "breakpoints": true
     }
   ]
 }

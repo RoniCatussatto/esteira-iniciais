@@ -1,0 +1,1 @@
+ALTER TABLE `documentos` ADD `textoExtraido` text;

@@ -98,7 +98,11 @@ export const appRouter = router({
         // Extração: processar apenas os identificados
         let extraidos = 0;
         for (const item of triagem.identificados) {
-          const resultado = await processarItemTriagem(item, devedorId, loteId);
+          // Usar textoExtraido do banco se disponível (evita 403 ao baixar do S3)
+          const docComTexto = docs.find(d => d.nomeArquivo === item.nomeArquivo && d.textoExtraido);
+          const resultado = docComTexto?.textoExtraido
+            ? await processarItemTriagemComTexto(item, devedorId, loteId, docComTexto.textoExtraido)
+            : await processarItemTriagem(item, devedorId, loteId);
           if (resultado) extraidos++;
         }
         return {
@@ -130,7 +134,11 @@ export const appRouter = router({
             lote.cooperativa
           );
           for (const item of triagem.identificados) {
-            const resultado = await processarItemTriagem(item, dev.id, loteId);
+            // Usar textoExtraido do banco se disponível (evita 403 ao baixar do S3)
+            const docComTexto = docs.find(d => d.nomeArquivo === item.nomeArquivo && d.textoExtraido);
+            const resultado = docComTexto?.textoExtraido
+              ? await processarItemTriagemComTexto(item, dev.id, loteId, docComTexto.textoExtraido)
+              : await processarItemTriagem(item, dev.id, loteId);
             if (resultado) extraidos++;
           }
         }
@@ -305,3 +313,4 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+import { processarItemTriagemComTexto } from "./extractor";

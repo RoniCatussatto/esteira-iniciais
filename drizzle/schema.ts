@@ -101,6 +101,7 @@ export const documentos = mysqlTable("documentos", {
   fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),
   mimeType: varchar("mimeType", { length: 100 }),
   tamanho: int("tamanho"),                             // bytes
+  textoExtraido: text("textoExtraido"),                // texto extraído do PDF durante o upload
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

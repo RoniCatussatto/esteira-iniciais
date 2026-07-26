@@ -209,6 +209,12 @@ export async function deleteDocumento(id: number) {
   return db.delete(documentos).where(eq(documentos.loteId, loteId));
 }
 
+export async function updateDocumentoTexto(id: number, textoExtraido: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(documentos).set({ textoExtraido }).where(eq(documentos.id, id));
+}
+
 // ─── Extrações ────────────────────────────────────────────────────────────────
 
 export async function getExtracoesByDevedor(devedorId: number) {

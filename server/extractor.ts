@@ -167,7 +167,7 @@ function aplicarTransformacao(valor: string, transformacao?: string): string {
 }
 
 /** Extrai texto de um PDF a partir do buffer. */
-async function extrairTextoPDF(buffer: Buffer): Promise<string | null> {
+export async function extrairTextoPDF(buffer: Buffer): Promise<string | null> {
   try {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
@@ -373,7 +373,32 @@ async function extrairCamposDeDocumentoIdentificado(
     console.log(`[Extractor] Não foi possível extrair texto de: "${nomeArquivo}"`);
     return resultado;
   }
+  return _extrairCamposComTexto(nomeArquivo, textoPDF, docConfig, resultado);
+}
 
+/**
+ * Extrai os campos de um documento usando texto já extraído (sem buffer).
+ * Usado para re-extração de documentos cujo texto foi salvo no banco.
+ */
+async function extrairCamposDeDocumentoIdentificadoComTexto(
+  nomeArquivo: string,
+  textoExtraido: string,
+  docConfig: DocConfigComRegras
+): Promise<CamposExtraidos> {
+  const resultado: CamposExtraidos = {
+    docConfigId: docConfig.id,
+    nomeDocumento: docConfig.nomeDocumento,
+  };
+  return _extrairCamposComTexto(nomeArquivo, textoExtraido, docConfig, resultado);
+}
+
+/** Lógica compartilhada de extração de campos a partir do texto do PDF. */
+function _extrairCamposComTexto(
+  nomeArquivo: string,
+  textoPDF: string,
+  docConfig: DocConfigComRegras,
+  resultado: CamposExtraidos
+): CamposExtraidos {
   // Verificação adicional por conteúdo (se configurada)
   const regras = docConfig.regrasIdentificacao;
   if (regras?.palavrasChaveConteudo && regras.palavrasChaveConteudo.length > 0) {
@@ -539,7 +564,41 @@ export async function processarItemTriagem(
     const campos = await extrairCamposDeDocumentoIdentificado(
       item.nomeArquivo, buf, item.mimeType, item.docConfig
     );
+    return await _finalizarExtracaoItem(item, devedorId, loteId, campos);
+  } catch (err) {
+    console.error(`[Extractor] Erro ao processar "${item.nomeArquivo}":`, err);
+    return null;
+  }
+}
 
+/**
+ * Processa um documento já identificado na triagem usando texto pré-extraído (sem buffer).
+ * Usado para re-extração de documentos já enviados cujo texto foi salvo no banco.
+ */
+export async function processarItemTriagemComTexto(
+  item: ItemTriagem,
+  devedorId: number,
+  loteId: number,
+  textoExtraido: string
+): Promise<CamposExtraidos | null> {
+  try {
+    const campos = await extrairCamposDeDocumentoIdentificadoComTexto(
+      item.nomeArquivo, textoExtraido, item.docConfig
+    );
+    return await _finalizarExtracaoItem(item, devedorId, loteId, campos);
+  } catch (err) {
+    console.error(`[Extractor] Erro ao processar (texto) "${item.nomeArquivo}":`, err);
+    return null;
+  }
+}
+
+/** Finaliza a extração: propaga contrato alvo, aplica fallbacks e grava no banco. */
+async function _finalizarExtracaoItem(
+  item: ItemTriagem,
+  devedorId: number,
+  loteId: number,
+  campos: CamposExtraidos
+): Promise<CamposExtraidos | null> {
     // Propagar o contrato identificado na triagem para a gravação
     campos.numeroContratoIdentificado = item.numeroContratoNoNome ?? null;
     console.log(`[Extractor] Contrato alvo para gravação: ${campos.numeroContratoIdentificado ?? "(todos)"}`);
@@ -568,10 +627,6 @@ export async function processarItemTriagem(
     await gravarExtracoes(devedorId, loteId, campos);
 
     return campos;
-  } catch (err) {
-    console.error(`[Extractor] Erro ao processar "${item.nomeArquivo}":`, err);
-    return null;
-  }
 }
 
 /**

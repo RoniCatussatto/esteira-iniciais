@@ -4,6 +4,10 @@ import { getDevedoresByLote, createDocumento } from "./db";
 import { storagePut } from "./storage";
 import { getLoteById } from "./db";
 import { triarDocumentos, processarItemTriagem } from "./extractor";
+import { extrairTextoPDF } from "./extractor";
+import { updateDocumentoTexto, getDb } from "./db";
+import { documentos as documentosTable } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -166,6 +170,19 @@ uploadDocsRouter.post("/:loteId/devedor/:devedorId", upload.array("files", 100),
           });
         }
       }
+      // Salvar texto extraído do PDF para re-extração futura sem precisar baixar do S3
+      if (file.mimetype?.includes("pdf") || file.originalname.toLowerCase().endsWith(".pdf")) {
+        extrairTextoPDF(file.buffer).then(async (texto) => {
+          if (texto) {
+            const db2 = await getDb();
+            if (db2) {
+              const docInserido = await db2.select({ id: documentosTable.id })
+                .from(documentosTable).where(eq(documentosTable.fileKey, fileKey)).limit(1);
+              if (docInserido[0]) await updateDocumentoTexto(docInserido[0].id, texto);
+            }
+          }
+        }).catch(() => {/* ignorar erros de extração de texto */});
+      }
     }
     return res.json({ success: true, adicionados });
   } catch (err: unknown) {
@@ -251,6 +268,19 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
               console.error("[UploadDocs/Batch] Erro na extração:", err);
             });
           }
+        }
+        // Salvar texto extraído do PDF para re-extração futura sem precisar baixar do S3
+        if (file.mimetype?.includes("pdf") || file.originalname.toLowerCase().endsWith(".pdf")) {
+          extrairTextoPDF(file.buffer).then(async (texto) => {
+            if (texto) {
+              const db2 = await getDb();
+              if (db2) {
+                const docInserido = await db2.select({ id: documentosTable.id })
+                  .from(documentosTable).where(eq(documentosTable.fileKey, fileKey)).limit(1);
+                if (docInserido[0]) await updateDocumentoTexto(docInserido[0].id, texto);
+              }
+            }
+          }).catch(() => {/* ignorar erros */});
         }
       } else {
         semVinculo.push(`${nomePasta}/${file.originalname}`);

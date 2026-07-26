@@ -599,12 +599,6 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
   } else {
     // Atualizar apenas os campos que foram extraídos
     const updateData: Record<string, unknown> = {};
-    if (campos.dadoPlanilha01 !== undefined) updateData.dadoPlanilha01 = campos.dadoPlanilha01;
-    if (campos.dadoPlanilha02 !== undefined) updateData.dadoPlanilha02 = campos.dadoPlanilha02;
-    if (campos.dadoPlanilha03 !== undefined) updateData.dadoPlanilha03 = campos.dadoPlanilha03;
-    if (campos.dadoPlanilha04 !== undefined) updateData.dadoPlanilha04 = campos.dadoPlanilha04;
-    if (campos.multa2pct !== undefined) updateData.multa2pct = campos.multa2pct;
-    if (campos.moraEspecifica !== undefined) updateData.moraEspecifica = campos.moraEspecifica;
 
     if (Object.keys(updateData).length > 0) {
       // Filtrar apenas o contrato alvo (se identificado); caso contrário, atualizar todos
@@ -628,7 +622,18 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
         console.log(`[Extractor] Contrato "${contratoAlvo}" não encontrado — inserido novo registro`);
       } else {
         for (const ext of extParaAtualizar) {
-          await db.update(extracoes).set(updateData).where(eq(extracoes.id, ext.id));
+          // Montar updateData respeitando campos já preenchidos: só sobrescreve se o campo atual for nulo/vazio
+          const updateDataPorExt: Record<string, unknown> = {};
+          if (campos.dadoPlanilha01 !== undefined && !ext.dadoPlanilha01) updateDataPorExt.dadoPlanilha01 = campos.dadoPlanilha01;
+          if (campos.dadoPlanilha02 !== undefined && !ext.dadoPlanilha02) updateDataPorExt.dadoPlanilha02 = campos.dadoPlanilha02;
+          if (campos.dadoPlanilha03 !== undefined && !ext.dadoPlanilha03) updateDataPorExt.dadoPlanilha03 = campos.dadoPlanilha03;
+          if (campos.dadoPlanilha04 !== undefined && !ext.dadoPlanilha04) updateDataPorExt.dadoPlanilha04 = campos.dadoPlanilha04;
+          // multa2pct e moraEspecifica: sobrescreve apenas se ainda "branco"/nulo
+          if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco")) updateDataPorExt.multa2pct = campos.multa2pct;
+          if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) updateDataPorExt.moraEspecifica = campos.moraEspecifica;
+          if (Object.keys(updateDataPorExt).length > 0) {
+            await db.update(extracoes).set(updateDataPorExt).where(eq(extracoes.id, ext.id));
+          }
         }
         console.log(`[Extractor] Extrações atualizadas: devedor ${devedorId}, ${extParaAtualizar.length} contrato(s)${contratoAlvo ? ` (alvo: "${contratoAlvo}")` : " (todos)"}`);
       }

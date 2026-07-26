@@ -207,6 +207,36 @@ function DevedorCard({
     onError: (e) => toast.error("Erro na extração: " + e.message),
   });
 
+  // Resultado da triagem para exibir ao usuário
+  const [resultadoTriagem, setResultadoTriagem] = useState<{
+    identificados: { arquivo: string; regra: string }[];
+    naoIdentificados: string[];
+  } | null>(null);
+
+  const extrairMutComTriagem = trpc.documentos.extrairDevedor.useMutation({
+    onSuccess: (data) => {
+      // Guardar resultado da triagem para exibir
+      if ("identificados" in data) {
+        setResultadoTriagem({
+          identificados: (data.identificados as { arquivo: string; regra: string }[]) ?? [],
+          naoIdentificados: (data.naoIdentificados as string[]) ?? [],
+        });
+      }
+      if (data.extraidos > 0) {
+        toast.success(`${data.extraidos} documento(s) extraído(s) com sucesso!`);
+        onChanged();
+      } else if (data.erro) {
+        toast.warning(data.erro as string);
+      } else if ("identificados" in data && (data.identificados as unknown[]).length === 0) {
+        toast.info("Nenhum documento identificado pelas regras configuradas.");
+      } else {
+        toast.info("Documentos identificados, mas sem campos extraídos.");
+        onChanged();
+      }
+    },
+    onError: (e) => toast.error("Erro na extração: " + e.message),
+  });
+
   function handleExpand() {
     if (!expanded && extracoes.length === 0 && dev.contratos) {
       // Inicializa automaticamente os contratos ao expandir pela primeira vez
@@ -319,19 +349,19 @@ function DevedorCard({
                 Dados Extraídos dos Documentos — por Contrato
               </h4>
               <div className="flex items-center gap-2">
-                {docs.length > 0 && (
-                  <Button
-                    variant="outline" size="sm"
-                    className="h-7 text-xs gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50"
-                    disabled={extrairMut.isPending}
-                    onClick={() => extrairMut.mutate({ devedorId: dev.id, loteId: dev.loteId })}
-                  >
-                    {extrairMut.isPending
-                      ? <Loader2 className="w-3 h-3 animate-spin" />
-                      : <Wand2 className="w-3 h-3" />}
-                    Extrair Dados
-                  </Button>
-                )}
+              {docs.length > 0 && (
+                <Button
+                  variant="outline" size="sm"
+                  className="h-7 text-xs gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50"
+                  disabled={extrairMutComTriagem.isPending}
+                  onClick={() => { setResultadoTriagem(null); extrairMutComTriagem.mutate({ devedorId: dev.id, loteId: dev.loteId }); }}
+                >
+                  {extrairMutComTriagem.isPending
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Wand2 className="w-3 h-3" />}
+                  Extrair Dados
+                </Button>
+              )}
                 <Button
                   variant="outline" size="sm"
                   className="h-7 text-xs gap-1.5"
@@ -362,6 +392,28 @@ function DevedorCard({
             )}
 
             {/* Cards de cada contrato */}
+            {/* Resultado da triagem */}
+            {resultadoTriagem && (
+              <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs space-y-1.5">
+                <p className="font-semibold text-blue-800">Triagem de documentos:</p>
+                {resultadoTriagem.identificados.length > 0 && (
+                  <div className="space-y-0.5">
+                    {resultadoTriagem.identificados.map((item, i) => (
+                      <p key={i} className="text-green-700">
+                        ✓ <span className="font-medium">{item.arquivo}</span> → regra: {item.regra}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {resultadoTriagem.naoIdentificados.length > 0 && (
+                  <div className="space-y-0.5">
+                    {resultadoTriagem.naoIdentificados.map((nome, i) => (
+                      <p key={i} className="text-gray-500">✗ {nome} — sem regra configurada</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {initMut.isPending ? (
               <div className="flex items-center gap-2 text-sm text-gray-500 py-3">
                 <Loader2 className="w-4 h-4 animate-spin" /> Inicializando contratos...

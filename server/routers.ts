@@ -10,6 +10,7 @@ import {
   updateDevedor,
 } from "./db";
 import { processarDocumentoUploadado } from "./extractor";
+import { triarDocumentos, processarItemTriagem } from "./extractor";
 import {
   getLotesPaginados,
   deleteLote,
@@ -89,19 +90,22 @@ export const appRouter = router({
         const docs = await getDocumentosByDevedor(devedorId);
         const lote = await getLoteById(loteId);
         if (!lote?.cooperativa) return { extraidos: 0, erro: "Cooperativa não encontrada no lote" };
+        // Triagem: identificar documentos pelo nome antes de baixar
+        const triagem = await triarDocumentos(
+          docs.map(d => ({ fileKey: d.fileKey, nomeArquivo: d.nomeArquivo, mimeType: d.mimeType })),
+          lote.cooperativa
+        );
+        // Extração: processar apenas os identificados
         let extraidos = 0;
-        for (const doc of docs) {
-          const resultado = await processarDocumentoUploadado({
-            fileKey: doc.fileKey,
-            nomeArquivo: doc.nomeArquivo,
-            mimeType: doc.mimeType,
-            devedorId,
-            loteId,
-            cooperativa: lote.cooperativa,
-          });
+        for (const item of triagem.identificados) {
+          const resultado = await processarItemTriagem(item, devedorId, loteId);
           if (resultado) extraidos++;
         }
-        return { extraidos };
+        return {
+          extraidos,
+          identificados: triagem.identificados.map(i => ({ arquivo: i.nomeArquivo, regra: i.docConfig.nomeDocumento })),
+          naoIdentificados: triagem.naoIdentificados,
+        };
       }),
     // Disparar extração automática para TODOS os devedores de um lote
     extrairLote: publicProcedure
@@ -117,15 +121,13 @@ export const appRouter = router({
           const docs = await getDocumentosByDevedor(dev.id);
           if (docs.length === 0) continue;
           devedoresProcessados++;
-          for (const doc of docs) {
-            const resultado = await processarDocumentoUploadado({
-              fileKey: doc.fileKey,
-              nomeArquivo: doc.nomeArquivo,
-              mimeType: doc.mimeType,
-              devedorId: dev.id,
-              loteId,
-              cooperativa: lote.cooperativa,
-            });
+          // Triagem por nome, depois extração apenas dos identificados
+          const triagem = await triarDocumentos(
+            docs.map(d => ({ fileKey: d.fileKey, nomeArquivo: d.nomeArquivo, mimeType: d.mimeType })),
+            lote.cooperativa
+          );
+          for (const item of triagem.identificados) {
+            const resultado = await processarItemTriagem(item, dev.id, loteId);
             if (resultado) extraidos++;
           }
         }

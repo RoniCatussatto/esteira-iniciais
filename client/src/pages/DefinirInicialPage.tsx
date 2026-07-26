@@ -79,7 +79,8 @@ function DevedorCard({
   onModeloSaved: (devedorId: number, modelo: string | null) => void;
   onIndiceSaved: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Expandido por padrão quando modelo ainda não foi definido
+  const [expanded, setExpanded] = useState(!dev.modeloInicial);
   const [modelo, setModelo] = useState(dev.modeloInicial ?? modeloPadraoCoop ?? "");
   const [savingModelo, setSavingModelo] = useState(false);
 
@@ -87,6 +88,8 @@ function DevedorCard({
     onSuccess: () => {
       toast.success("Modelo salvo.");
       onModeloSaved(dev.id, modelo || null);
+      // Colapsa automaticamente após salvar com sucesso
+      if (modelo && modelo.trim()) setExpanded(false);
     },
     onError: (e) => toast.error("Erro ao salvar modelo: " + e.message),
     onSettled: () => setSavingModelo(false),

@@ -1,6 +1,6 @@
 import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig, indicesCorrecao, InsertIndiceCorrecao, modelosIniciais, InsertModeloInicial } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig, indicesCorrecao, InsertIndiceCorrecao, modelosIniciais, InsertModeloInicial, modelosCalculo, InsertModeloCalculo } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -434,4 +434,41 @@ export async function deleteModeloInicial(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(modelosIniciais).where(eq(modelosIniciais.id, id));
+}
+
+// ── Modelos de Cálculo ───────────────────────────────────────────────────────
+
+export async function getAllModelosCalculo() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(modelosCalculo).orderBy(modelosCalculo.categoriaPlanilha, modelosCalculo.qtdContratos);
+}
+
+export async function getModeloCalculoByCategoriaQtd(categoriaPlanilha: string, qtdContratos: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(modelosCalculo)
+    .where(eq(modelosCalculo.categoriaPlanilha, categoriaPlanilha))
+    .limit(20);
+  return result.find((r) => r.qtdContratos === qtdContratos) ?? null;
+}
+
+export async function upsertModeloCalculo(data: InsertModeloCalculo) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(modelosCalculo).values(data).onDuplicateKeyUpdate({
+    set: {
+      fileKey: data.fileKey,
+      fileUrl: data.fileUrl,
+      nomeArquivo: data.nomeArquivo,
+      tamanho: data.tamanho,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+export async function deleteModeloCalculo(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(modelosCalculo).where(eq(modelosCalculo.id, id));
 }

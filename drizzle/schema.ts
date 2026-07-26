@@ -259,3 +259,29 @@ export const modelosIniciais = mysqlTable("modelosIniciais", {
 
 export type ModeloInicial = typeof modelosIniciais.$inferSelect;
 export type InsertModeloInicial = typeof modelosIniciais.$inferInsert;
+
+/**
+ * Modelos de planilha de cálculo — arquivos .xlsx com fórmulas e placeholders.
+ * A chave única é (categoriaPlanilha + qtdContratos): uma planilha por combinação.
+ * Máximo de 20 contratos por categoria.
+ */
+export const modelosCalculo = mysqlTable("modelosCalculo", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Categoria da planilha (ex: "CAC e CCB", "CE", "Cartao") */
+  categoriaPlanilha: varchar("categoriaPlanilha", { length: 100 }).notNull(),
+  /** Quantidade de contratos que esta planilha suporta (1–20) */
+  qtdContratos: int("qtdContratos").notNull(),
+  /** Chave S3 do arquivo .xlsx */
+  fileKey: varchar("fileKey", { length: 1000 }).notNull(),
+  /** URL de acesso ao arquivo .xlsx */
+  fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),
+  /** Nome original do arquivo enviado */
+  nomeArquivo: varchar("nomeArquivo", { length: 500 }).notNull(),
+  /** Tamanho em bytes */
+  tamanho: int("tamanho"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ModeloCalculo = typeof modelosCalculo.$inferSelect;
+export type InsertModeloCalculo = typeof modelosCalculo.$inferInsert;

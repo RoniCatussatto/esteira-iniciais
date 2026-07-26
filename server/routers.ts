@@ -61,6 +61,11 @@ import {
   updateModeloInicial,
   deleteModeloInicial,
 } from "./db";
+import {
+  getAllModelosCalculo,
+  upsertModeloCalculo,
+  deleteModeloCalculo,
+} from "./db";
 import { storagePut } from "./storage";
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -482,6 +487,38 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => deleteModeloInicial(input.id)),
+  }),
+
+  modelosCalculo: router({
+    list: publicProcedure.query(() => getAllModelosCalculo()),
+
+    upload: publicProcedure
+      .input(z.object({
+        categoriaPlanilha: z.string().min(1),
+        qtdContratos: z.number().int().min(1).max(20),
+        nomeArquivo: z.string(),
+        tamanho: z.number().optional(),
+        fileBase64: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const fileBuffer = Buffer.from(input.fileBase64, "base64");
+        const safeCategoria = input.categoriaPlanilha.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const fileKey = `modelos-calculo/${safeCategoria}_${input.qtdContratos}contratos_${Date.now()}.xlsx`;
+        const { key, url } = await storagePut(fileKey, fileBuffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        await upsertModeloCalculo({
+          categoriaPlanilha: input.categoriaPlanilha,
+          qtdContratos: input.qtdContratos,
+          fileKey: key,
+          fileUrl: url,
+          nomeArquivo: input.nomeArquivo,
+          tamanho: input.tamanho,
+        });
+        return { ok: true };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteModeloCalculo(input.id)),
   }),
 
 });

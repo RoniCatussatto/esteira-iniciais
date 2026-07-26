@@ -12,6 +12,8 @@ import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import DocConfigPage from "./pages/DocConfigPage";
 import IndicesPage from "./pages/IndicesPage";
 import DefinirInicialPage from "./pages/DefinirInicialPage";
+import ModelosCalculoPage from "./pages/ModelosCalculoPage";
+import ModelosIniciaisPage from "./pages/ModelosIniciaisPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -25,6 +27,7 @@ function Router() {
       <Route path={"/configuracoes/cliente/:clienteId/doc/:docConfigId"} component={DocConfigPage} />
       <Route path={"/indices"} component={IndicesPage} />
       <Route path={"/modelos-iniciais"} component={ModelosIniciaisPage} />
+      <Route path={"/modelos-calculo"} component={ModelosCalculoPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -54,4 +57,3 @@ function App() {
 }
 
 export default App;
-import ModelosIniciaisPage from "./pages/ModelosIniciaisPage";

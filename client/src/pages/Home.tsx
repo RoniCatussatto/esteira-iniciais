@@ -137,6 +137,12 @@ export default function Home() {
                 Modelos de Iniciais
               </Button>
             </Link>
+            <Link href="/modelos-calculo">
+              <Button variant="outline" size="sm" className="gap-1.5 mr-2">
+                <Calculator className="w-4 h-4" />
+                Modelos de Cálculos
+              </Button>
+            </Link>
             <Link href="/configuracoes">
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Building2 className="w-4 h-4" />
@@ -345,3 +351,4 @@ export default function Home() {
     </div>
   );
 }
+import { Calculator } from "lucide-react";

@@ -1,6 +1,6 @@
 import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig, indicesCorrecao, InsertIndiceCorrecao } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig, indicesCorrecao, InsertIndiceCorrecao, modelosIniciais, InsertModeloInicial } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -394,4 +394,44 @@ export async function deleteIndiceCorrecao(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(indicesCorrecao).where(eq(indicesCorrecao.id, id));
+}
+
+// ── Modelos de Iniciais ──────────────────────────────────────────────────────
+
+export async function getAllModelosIniciais() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(modelosIniciais).orderBy(modelosIniciais.nome);
+}
+
+export async function getModeloInicialById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(modelosIniciais).where(eq(modelosIniciais.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getModeloInicialByNome(nome: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(modelosIniciais).where(eq(modelosIniciais.nome, nome)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createModeloInicial(data: InsertModeloInicial) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(modelosIniciais).values(data);
+}
+
+export async function updateModeloInicial(id: number, data: Partial<InsertModeloInicial>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(modelosIniciais).set({ ...data, updatedAt: new Date() }).where(eq(modelosIniciais.id, id));
+}
+
+export async function deleteModeloInicial(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(modelosIniciais).where(eq(modelosIniciais.id, id));
 }

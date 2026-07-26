@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Building2 } from "lucide-react";
 import { TrendingUp } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { Link } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -130,10 +131,16 @@ export default function Home() {
                 Índices
               </Button>
             </Link>
+            <Link href="/modelos-iniciais">
+              <Button variant="outline" size="sm" className="gap-1.5 mr-2">
+                <BookOpen className="w-4 h-4" />
+                Modelos de Iniciais
+              </Button>
+            </Link>
             <Link href="/configuracoes">
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Building2 className="w-4 h-4" />
-                Configurações
+                Clientes
               </Button>
             </Link>
           </div>

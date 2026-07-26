@@ -211,3 +211,51 @@ export const indicesCorrecao = mysqlTable("indicesCorrecao", {
 
 export type IndiceCorrecao = typeof indicesCorrecao.$inferSelect;
 export type InsertIndiceCorrecao = typeof indicesCorrecao.$inferInsert;
+
+/**
+ * Categorias de planilha de cálculo disponíveis.
+ * Cada modelo de inicial é associado a uma dessas categorias.
+ */
+export const CATEGORIAS_PLANILHA = [
+  "Geral IPCA",
+  "Geral SELIC",
+  "CAC e CCB",
+  "CE",
+  "Cartao",
+  "Confissao",
+  "Santa Casa",
+  "Colegio",
+  "Cheque",
+  "CE e Cartao",
+  "Emprestimo com CE",
+  "Emprestimo com Cartao",
+  "Emprestimo com CE e Cartao",
+] as const;
+
+export type CategoriaPlanilha = (typeof CATEGORIAS_PLANILHA)[number];
+
+/**
+ * Modelos de petição inicial — arquivos .docx com placeholders.
+ * O nome é o identificador único (ex: "CAC", "COB CCB", "EXEC CONFISSAO").
+ * Cada modelo está associado a uma categoria de planilha de cálculo.
+ */
+export const modelosIniciais = mysqlTable("modelosIniciais", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Nome identificador único (ex: "CAC", "COB CCB", "EXEC CONFISSAO") */
+  nome: varchar("nome", { length: 100 }).notNull().unique(),
+  /** Categoria da planilha de cálculo associada */
+  categoriaPlanilha: varchar("categoriaPlanilha", { length: 100 }).notNull(),
+  /** Chave S3 do arquivo .docx */
+  fileKey: varchar("fileKey", { length: 1000 }).notNull(),
+  /** URL de acesso ao arquivo .docx */
+  fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),
+  /** Nome original do arquivo enviado */
+  nomeArquivo: varchar("nomeArquivo", { length: 500 }).notNull(),
+  /** Tamanho em bytes */
+  tamanho: int("tamanho"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ModeloInicial = typeof modelosIniciais.$inferSelect;
+export type InsertModeloInicial = typeof modelosIniciais.$inferInsert;

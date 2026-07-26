@@ -54,6 +54,14 @@ import {
   updateIndiceCorrecao,
   deleteIndiceCorrecao,
 } from "./db";
+import {
+  getAllModelosIniciais,
+  getModeloInicialByNome,
+  createModeloInicial,
+  updateModeloInicial,
+  deleteModeloInicial,
+} from "./db";
+import { storagePut } from "./storage";
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -420,6 +428,62 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => deleteIndiceCorrecao(input.id)),
   }),
+
+  modelosIniciais: router({
+    list: publicProcedure.query(() => getAllModelosIniciais()),
+
+    upload: publicProcedure
+      .input(z.object({
+        nome: z.string().min(1).max(100),
+        categoriaPlanilha: z.string().min(1),
+        nomeArquivo: z.string(),
+        tamanho: z.number().optional(),
+        fileBase64: z.string(), // conteúdo do arquivo em base64
+      }))
+      .mutation(async ({ input }) => {
+        // Verifica se já existe modelo com esse nome
+        const existente = await getModeloInicialByNome(input.nome);
+        const fileBuffer = Buffer.from(input.fileBase64, "base64");
+        const fileKey = `modelos-iniciais/${input.nome.replace(/[^a-zA-Z0-9_-]/g, "_")}_${Date.now()}.docx`;
+        const { key, url } = await storagePut(fileKey, fileBuffer, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        if (existente) {
+          // Substitui o existente
+          await updateModeloInicial(existente.id, {
+            categoriaPlanilha: input.categoriaPlanilha,
+            fileKey: key,
+            fileUrl: url,
+            nomeArquivo: input.nomeArquivo,
+            tamanho: input.tamanho,
+          });
+          return { id: existente.id, replaced: true };
+        }
+        const result = await createModeloInicial({
+          nome: input.nome,
+          categoriaPlanilha: input.categoriaPlanilha,
+          fileKey: key,
+          fileUrl: url,
+          nomeArquivo: input.nomeArquivo,
+          tamanho: input.tamanho,
+        });
+        return { id: (result as { insertId?: number }).insertId, replaced: false };
+      }),
+
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        nome: z.string().min(1).max(100).optional(),
+        categoriaPlanilha: z.string().min(1).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updateModeloInicial(id, data);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteModeloInicial(input.id)),
+  }),
+
 });
 
 export type AppRouter = typeof appRouter;

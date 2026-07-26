@@ -24,6 +24,7 @@ function Router() {
       <Route path={"/configuracoes"} component={ConfiguracoesPage} />
       <Route path={"/configuracoes/cliente/:clienteId/doc/:docConfigId"} component={DocConfigPage} />
       <Route path={"/indices"} component={IndicesPage} />
+      <Route path={"/modelos-iniciais"} component={ModelosIniciaisPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -53,3 +54,4 @@ function App() {
 }
 
 export default App;
+import ModelosIniciaisPage from "./pages/ModelosIniciaisPage";

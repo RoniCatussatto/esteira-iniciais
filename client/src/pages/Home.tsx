@@ -27,6 +27,7 @@ export default function Home() {
   const [page, setPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const utils = trpc.useUtils();
+  const [loteParaExcluir, setLoteParaExcluir] = useState<{ id: number; nome: string } | null>(null);
 
   const { data, isLoading: loadingLotes } = trpc.lotes.list.useQuery(
     { page, pageSize: PAGE_SIZE }
@@ -48,6 +49,16 @@ export default function Home() {
       utils.lotes.list.invalidate();
     },
     onError: (err) => toast.error("Erro ao limpar: " + err.message),
+  });
+
+  const excluirLoteMutation = trpc.lotes.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Lote excluído com sucesso.");
+      setLoteParaExcluir(null);
+      setPage(1);
+      utils.lotes.list.invalidate();
+    },
+    onError: (err) => toast.error("Erro ao excluir lote: " + err.message),
   });
 
   async function handleUpload(file: File) {
@@ -219,13 +230,12 @@ export default function Home() {
                   {lotes.map((lote) => {
                     const antigo = isOlderThan30Days(lote.createdAt);
                     return (
-                      <button
-                        key={lote.id}
-                        className="w-full text-left flex items-center justify-between px-2 py-4 hover:bg-gray-50 rounded-lg transition-colors group"
-                        onClick={() => navigate(`/lote/${lote.id}`)}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className="mt-0.5">
+                      <div key={lote.id} className="flex items-center justify-between px-2 py-4 hover:bg-gray-50 rounded-lg transition-colors group">
+                        <button
+                          className="flex-1 text-left flex items-center gap-4 min-w-0"
+                          onClick={() => navigate(`/lote/${lote.id}`)}
+                        >
+                          <div className="mt-0.5 flex-shrink-0">
                             {lote.status === "concluido" ? (
                               <CheckCircle className="w-5 h-5 text-green-500" />
                             ) : lote.status === "erro" ? (
@@ -234,7 +244,7 @@ export default function Home() {
                               <Clock className="w-5 h-5 text-gray-400" />
                             )}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium text-gray-900">{lote.nome}</p>
                             <p className="text-sm text-gray-500 mt-0.5">
                               {lote.totalDevedores} devedor(es) · Importado em{" "}
@@ -244,15 +254,46 @@ export default function Home() {
                               )}
                             </p>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-3">
+                        </button>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                           {statusBadge(lote.status)}
+                          <button
+                            className="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Excluir lote"
+                            onClick={(e) => { e.stopPropagation(); setLoteParaExcluir({ id: lote.id, nome: lote.nome }); }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                           <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
+                {/* AlertDialog de confirmação de exclusão individual */}
+                <AlertDialog open={!!loteParaExcluir} onOpenChange={(open) => { if (!open) setLoteParaExcluir(null); }}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-red-500" />
+                        Excluir lote
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        O lote <strong>{loteParaExcluir?.nome}</strong> será excluído permanentemente, incluindo todos os devedores, documentos e dados vinculados. Esta ação não pode ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-red-600 hover:bg-red-700"
+                        onClick={() => loteParaExcluir && excluirLoteMutation.mutate({ id: loteParaExcluir.id })}
+                      >
+                        {excluirLoteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Excluir lote
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
                 {/* Paginação */}
                 {totalPages > 1 && (

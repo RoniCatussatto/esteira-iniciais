@@ -164,6 +164,9 @@ function aplicarTransformacao(valor: string, transformacao?: string): string {
   if (t.includes("ponto de milhar") || t.includes("milhar")) {
     resultado = resultado.replace(/\./g, "");
   }
+  if (t === "removerpontomilhar" || t.includes("removerponto")) {
+    resultado = resultado.replace(/\./g, "");
+  }
   return resultado.trim();
 }
 
@@ -437,6 +440,59 @@ function _extrairCamposComTexto(
           camposIntermedios[chave] = valorFinal;
           console.log(`[Extractor] Campo intermediário "${campo.campo}" = "${valorFinal}"`);
         }
+      }
+    }
+  }
+  // Suporte a extração por índice de linha (campo.linhaIndice ou campo.linhaCond)
+  const linhas = textoPDF.split("\n").map((l: string) => l.trim());
+  for (const campo of docConfig.camposExtracao) {
+    if (!campo.campo) continue;
+    const chave = normStr(campo.campo).replace(/[_\s]/g, "");
+    // Já extraído por regex — pular
+    if (camposIntermedios[chave] !== undefined) continue;
+
+    // Extração por índice fixo: campo.linhaIndice (número)
+    const linhaIdx = (campo as { linhaIndice?: number }).linhaIndice;
+    if (typeof linhaIdx === "number") {
+      const valorBruto = linhas[linhaIdx] ?? "";
+      if (valorBruto) {
+        const valorFinal = aplicarTransformacao(valorBruto, campo.transformacao) ?? valorBruto;
+        camposIntermedios[chave] = valorFinal;
+        console.log(`[Extractor] Campo intermediário (linha ${linhaIdx}) "${campo.campo}" = "${valorFinal}"`);
+      }
+    }
+
+    // Extração condicional por índice: campo.linhaCond = { condicaoLinha, condicaoContem, linhaSeVerdadeiro, linhaSefalso }
+    const linhaCond = (campo as { linhaCond?: { condicaoLinha: number; condicaoContem: string; linhaSeVerdadeiro: number; linhaSefalso: number } }).linhaCond;
+    if (linhaCond) {
+      const valorCondicao = linhas[linhaCond.condicaoLinha] ?? "";
+      const condicaoAtendida = normStr(valorCondicao).includes(normStr(linhaCond.condicaoContem));
+      const linhaAlvo = condicaoAtendida ? linhaCond.linhaSeVerdadeiro : linhaCond.linhaSefalso;
+      const valorBruto = linhas[linhaAlvo] ?? "";
+      if (valorBruto) {
+        const valorFinal = aplicarTransformacao(valorBruto, campo.transformacao) ?? valorBruto;
+        camposIntermedios[chave] = valorFinal;
+        console.log(`[Extractor] Campo intermediário (linhaCond[${linhaAlvo}]) "${campo.campo}" = "${valorFinal}"`);
+      }
+    }
+
+    // Extração especial: campo.linhaEspecial = "saldoQuitacao" (lógica do script original)
+    const linhaEspecial = (campo as { linhaEspecial?: string }).linhaEspecial;
+    if (linhaEspecial === "saldoQuitacao") {
+      const val46 = linhas[46] ?? "";
+      let saldo = val46;
+      if (val46 === "% a.m.") {
+        const match47 = (linhas[47] ?? "").match(/([\d.,]+)/);
+        saldo = match47 ? match47[0] : "";
+      }
+      if (saldo.includes("Taxa Juros")) {
+        const m = saldo.match(/([\d.,]+)/);
+        saldo = m ? m[0] : "";
+      }
+      if (saldo) {
+        const valorFinal = aplicarTransformacao(saldo, campo.transformacao) ?? saldo;
+        camposIntermedios[chave] = valorFinal;
+        console.log(`[Extractor] Campo intermediário (saldoQuitacao especial) "${campo.campo}" = "${valorFinal}"`);
       }
     }
   }

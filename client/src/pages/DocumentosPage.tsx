@@ -11,6 +11,7 @@ import {
   ChevronDown, ChevronRight,
 } from "lucide-react";
 import { ArrowRight } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -95,6 +96,20 @@ export default function DocumentosPage() {
       toast.error("Erro na extração: " + e.message);
       navigate(`/lote/${loteId}/revisao`);
     },
+  });
+
+  const reextrairTextoMut = trpc.documentos.reextrairTexto.useMutation({
+    onSuccess: (data) => {
+      if (data.atualizados > 0) {
+        toast.success(`Texto re-extraído: ${data.atualizados} de ${data.total} PDF(s) atualizado(s). Agora clique em "Avançar" para extrair os dados.`);
+        refetchDocs();
+      } else if (data.total === 0) {
+        toast.info("Todos os PDFs já têm texto extraído.");
+      } else {
+        toast.warning(`Nenhum texto extraído. Verifique se os PDFs são legíveis (não escaneados).`);
+      }
+    },
+    onError: (e) => toast.error("Erro ao re-extrair texto: " + e.message),
   });
 
   async function handleAvancar() {
@@ -253,6 +268,20 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
               <><Loader2 className="w-4 h-4 animate-spin" /> Extraindo dados...</>
             ) : (
               <>Avançar — Revisar Dados <ArrowRight className="w-4 h-4" /></>
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => reextrairTextoMut.mutate({ loteId })}
+            disabled={reextrairTextoMut.isPending}
+            className="gap-2"
+            title="Baixa PDFs do servidor e salva o texto para extração. Use quando documentos foram enviados antes da versão atual."
+          >
+            {reextrairTextoMut.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Baixando PDFs...</>
+            ) : (
+              <><RefreshCw className="w-4 h-4" /> Re-extrair Texto</>
             )}
           </Button>
         </div>

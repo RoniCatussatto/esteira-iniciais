@@ -11,6 +11,10 @@ import {
 } from "./db";
 import { processarDocumentoUploadado } from "./extractor";
 import { triarDocumentos, processarItemTriagem } from "./extractor";
+import { baixarArquivo, extrairTextoPDF } from "./extractor";
+import { updateDocumentoTexto, getDb } from "./db";
+import { documentos as documentosTable } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
 import {
   getLotesPaginados,
   deleteLote,
@@ -111,9 +115,35 @@ export const appRouter = router({
           naoIdentificados: triagem.naoIdentificados,
         };
       }),
-    // Nota: o botão "Extrair Dados" tenta baixar do S3 via URL assinada.
-    // Para documentos já enviados, a extração é feita no momento do upload (buffer em memória).
-    // O botão "Extrair Dados" serve para re-extração forçada, mas pode falhar se o arquivo não puder ser baixado.
+    // Re-extrair texto de documentos com textoExtraido nulo (baixa do S3 e salva no banco)
+    reextrairTexto: publicProcedure
+      .input(z.object({ loteId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { loteId } = input;
+        const db = await getDb();
+        if (!db) return { atualizados: 0, erro: "DB não disponível" };
+        // Buscar documentos PDF sem texto extraído neste lote
+        const docsLote = await getDocumentosByLote(loteId);
+        const docsSemTexto = docsLote.filter(d => {
+          const raw = d.textoExtraido;
+          if (!raw) return true;
+          const str = Buffer.isBuffer(raw) ? (raw as Buffer).toString('utf8') : String(raw);
+          return str.trim().length === 0;
+        }).filter(d => d.mimeType?.includes('pdf') || d.nomeArquivo.toLowerCase().endsWith('.pdf'));
+        console.log(`[ReextrairTexto] ${docsSemTexto.length} documento(s) sem texto no lote ${loteId}`);
+        let atualizados = 0;
+        for (const doc of docsSemTexto) {
+          console.log(`[ReextrairTexto] Baixando: ${doc.nomeArquivo} (key=${doc.fileKey})`);
+          const buf = await baixarArquivo(doc.fileKey);
+          if (!buf) { console.warn(`[ReextrairTexto] Falha ao baixar: ${doc.nomeArquivo}`); continue; }
+          const texto = await extrairTextoPDF(buf);
+          if (!texto || texto.trim().length === 0) { console.warn(`[ReextrairTexto] Texto vazio para: ${doc.nomeArquivo}`); continue; }
+          await updateDocumentoTexto(doc.id, texto);
+          console.log(`[ReextrairTexto] Texto salvo para doc ${doc.id} (${doc.nomeArquivo}): ${texto.length} chars`);
+          atualizados++;
+        }
+        return { atualizados, total: docsSemTexto.length };
+      }),
     // Disparar extração automática para TODOS os devedores de um lote
     extrairLote: publicProcedure
       .input(z.object({ loteId: z.number() }))

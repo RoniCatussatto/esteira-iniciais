@@ -176,12 +176,24 @@ export async function extrairTextoPDF(buffer: Buffer): Promise<string | null> {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     const result = await parser.getText();
-    return result.text ?? null;
+    const texto = result.text ?? null;
+    if (texto) {
+      const linhas = texto.split('\n').length;
+      console.log(`[Extractor] PDF parseado: ${texto.length} chars, ${linhas} linhas`);
+    } else {
+      console.warn("[Extractor] PDF parseado mas texto vazio/null");
+    }
+    return texto;
   } catch (err) {
     console.error("[Extractor] Erro ao extrair texto do PDF:", err);
     return null;
   }
 }
+
+/**
+ * Exporta a função baixarArquivo para uso externo (ex: re-extração de texto).
+ */
+export { baixarArquivo };
 
 /**
  * Baixa o arquivo do S3 via Forge API (URL assinada fresca a cada chamada).
@@ -479,16 +491,12 @@ function _extrairCamposComTexto(
     // Extração especial: campo.linhaEspecial = "saldoQuitacao" (lógica do script original)
     const linhaEspecial = (campo as { linhaEspecial?: string }).linhaEspecial;
     if (linhaEspecial === "saldoQuitacao") {
-      const val46 = linhas[46] ?? "";
-      let saldo = val46;
-      if (val46 === "% a.m.") {
-        const match47 = (linhas[47] ?? "").match(/([\d.,]+)/);
-        saldo = match47 ? match47[0] : "";
-      }
-      if (saldo.includes("Taxa Juros")) {
-        const m = saldo.match(/([\d.,]+)/);
-        saldo = m ? m[0] : "";
-      }
+      // Linha 43: "Valor Líquido" — começa com número quando há inadimplência
+      // Ex: "8.503,49\tTaxa Juros Inad: % a.m.\t3,0100"
+      // Quando não há inadimplência, linha 43 = "% a.m." → usa linha 29
+      const val43 = linhas[43] ?? "";
+      const match43 = val43.match(/^([\d.,]+)/);
+      let saldo = match43 ? match43[1] : (linhas[29] ?? "");
       if (saldo) {
         const valorFinal = aplicarTransformacao(saldo, campo.transformacao) ?? saldo;
         camposIntermedios[chave] = valorFinal;

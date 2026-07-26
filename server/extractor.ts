@@ -28,6 +28,7 @@ interface CampoExtracao {
   localizacao?: string;
   regex?: string;
   transformacao?: string;
+  identificaContrato?: boolean; // se true, o valor extraído é o número do contrato
 }
 
 interface MapeamentoCampos {
@@ -62,6 +63,7 @@ export interface CamposExtraidos {
   moraEspecifica?: string | null;
   docConfigId?: number;
   nomeDocumento?: string;
+  numeroContratoIdentificado?: string | null; // contrato identificado no nome do arquivo
 }
 
 /** Item do resultado da triagem: um documento e a regra que o identificou */
@@ -70,6 +72,7 @@ export interface ItemTriagem {
   nomeArquivo: string;
   mimeType: string | null;
   docConfig: DocConfigComRegras;
+  numeroContratoNoNome?: string | null; // número do contrato extraído do nome do arquivo
 }
 
 /** Resultado completo da triagem de um devedor */
@@ -106,6 +109,36 @@ function identificarPorConteudo(texto: string, regras: RegrasIdentificacao): boo
   const palavras = regras.palavrasChaveConteudo ?? [];
   if (palavras.length === 0) return false;
   return palavras.some((p) => textoNorm.includes(normStr(p)));
+}
+
+/**
+ * Tenta extrair o número do contrato do nome do arquivo.
+ * Estratégias (em ordem de prioridade):
+ * 1. Regex configurada na docConfig (campo com identificaContrato=true)
+ * 2. Padrão genérico: sequência de 5+ dígitos após hífen ou espaço no nome
+ */
+function extrairContratoDoNome(nomeArquivo: string, camposExtracao: CampoExtracao[]): string | null {
+  // Estratégia 1: usar regex de campo marcado como identificaContrato
+  const campoContrato = camposExtracao.find((c) => c.identificaContrato);
+  if (campoContrato?.regex) {
+    try {
+      const match = nomeArquivo.match(new RegExp(campoContrato.regex, "i"));
+      if (match?.[1]) return match[1].trim();
+    } catch { /* ignorar regex inválida */ }
+  }
+
+  // Estratégia 2: padrão genérico — sequência de 5+ dígitos após " - ", "- ", " -" ou espaço
+  // Exemplo: "FATURA - 330525.pdf" → "330525"
+  //          "FATURA - 6655480.pdf" → "6655480"
+  const semExtensao = nomeArquivo.replace(/\.[^.]+$/, "");
+  const matchGenerico = semExtensao.match(/[-\s]+([0-9]{5,})\s*$/);
+  if (matchGenerico?.[1]) return matchGenerico[1].trim();
+
+  // Estratégia 3: qualquer sequência de 5+ dígitos no nome
+  const matchQualquer = semExtensao.match(/([0-9]{5,})/);
+  if (matchQualquer?.[1]) return matchQualquer[1].trim();
+
+  return null;
 }
 
 /** Aplica uma regex ao texto e retorna o primeiro grupo capturado. */
@@ -277,7 +310,9 @@ export async function triarDocumentos(
 
     if (docConfigMatch) {
       console.log(`[Triagem] ✓ "${doc.nomeArquivo}" → ${docConfigMatch.nomeDocumento}`);
-      identificados.push({ ...doc, docConfig: docConfigMatch });
+      const numeroContratoNoNome = extrairContratoDoNome(doc.nomeArquivo, docConfigMatch.camposExtracao);
+      console.log(`[Triagem]   Contrato no nome: ${numeroContratoNoNome ?? "(não identificado)"}`);
+      identificados.push({ ...doc, docConfig: docConfigMatch, numeroContratoNoNome });
     } else {
       console.log(`[Triagem] ✗ "${doc.nomeArquivo}" — sem regra correspondente`);
       naoIdentificados.push(doc.nomeArquivo);
@@ -368,6 +403,10 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
 
   const extracoesDev = await db.select().from(extracoes).where(eq(extracoes.devedorId, devedorId));
 
+  // Determinar o contrato alvo: usar o número identificado no nome do arquivo
+  const contratoAlvo = campos.numeroContratoIdentificado?.trim() ?? null;
+  console.log(`[Extractor] Contrato alvo: ${contratoAlvo ?? "(todos)"}`);
+
   if (extracoesDev.length === 0) {
     // Inicializar extrações a partir dos contratos do devedor
     const devResult = await db.select().from(devedores).where(eq(devedores.id, devedorId)).limit(1);
@@ -375,18 +414,22 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
     if (contratosStr) {
       const contratos = contratosStr.split(/\s*\/\s*/).map((c) => c.trim()).filter(Boolean);
       if (contratos.length > 0) {
-        await db.insert(extracoes).values(contratos.map((c) => ({
-          devedorId,
-          loteId,
-          numeroContrato: c,
-          dadoPlanilha01: campos.dadoPlanilha01 ?? null,
-          dadoPlanilha02: campos.dadoPlanilha02 ?? null,
-          dadoPlanilha03: campos.dadoPlanilha03 ?? null,
-          dadoPlanilha04: campos.dadoPlanilha04 ?? null,
-          multa2pct: campos.multa2pct ?? "branco",
-          moraEspecifica: campos.moraEspecifica ?? null,
-        })));
-        console.log(`[Extractor] Extrações inicializadas: devedor ${devedorId}, ${contratos.length} contrato(s)`);
+        // Se temos um contrato alvo, aplicar dados apenas nele; nos demais, inicializar em branco
+        await db.insert(extracoes).values(contratos.map((c) => {
+          const isAlvo = !contratoAlvo || c === contratoAlvo;
+          return {
+            devedorId,
+            loteId,
+            numeroContrato: c,
+            dadoPlanilha01: isAlvo ? (campos.dadoPlanilha01 ?? null) : null,
+            dadoPlanilha02: isAlvo ? (campos.dadoPlanilha02 ?? null) : null,
+            dadoPlanilha03: isAlvo ? (campos.dadoPlanilha03 ?? null) : null,
+            dadoPlanilha04: isAlvo ? (campos.dadoPlanilha04 ?? null) : null,
+            multa2pct: isAlvo ? (campos.multa2pct ?? "branco") : "branco",
+            moraEspecifica: isAlvo ? (campos.moraEspecifica ?? null) : null,
+          };
+        }));
+        console.log(`[Extractor] Extrações inicializadas: devedor ${devedorId}, ${contratos.length} contrato(s)${contratoAlvo ? `, dados aplicados apenas em "${contratoAlvo}"` : ""}`);
       }
     }
   } else {
@@ -400,10 +443,31 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
     if (campos.moraEspecifica !== undefined) updateData.moraEspecifica = campos.moraEspecifica;
 
     if (Object.keys(updateData).length > 0) {
-      for (const ext of extracoesDev) {
-        await db.update(extracoes).set(updateData).where(eq(extracoes.id, ext.id));
+      // Filtrar apenas o contrato alvo (se identificado); caso contrário, atualizar todos
+      const extParaAtualizar = contratoAlvo
+        ? extracoesDev.filter((e) => e.numeroContrato === contratoAlvo)
+        : extracoesDev;
+
+      if (extParaAtualizar.length === 0 && contratoAlvo) {
+        // Contrato alvo não encontrado nas extrações existentes — inserir novo
+        await db.insert(extracoes).values({
+          devedorId,
+          loteId,
+          numeroContrato: contratoAlvo,
+          dadoPlanilha01: campos.dadoPlanilha01 ?? null,
+          dadoPlanilha02: campos.dadoPlanilha02 ?? null,
+          dadoPlanilha03: campos.dadoPlanilha03 ?? null,
+          dadoPlanilha04: campos.dadoPlanilha04 ?? null,
+          multa2pct: campos.multa2pct ?? "branco",
+          moraEspecifica: campos.moraEspecifica ?? null,
+        });
+        console.log(`[Extractor] Contrato "${contratoAlvo}" não encontrado — inserido novo registro`);
+      } else {
+        for (const ext of extParaAtualizar) {
+          await db.update(extracoes).set(updateData).where(eq(extracoes.id, ext.id));
+        }
+        console.log(`[Extractor] Extrações atualizadas: devedor ${devedorId}, ${extParaAtualizar.length} contrato(s)${contratoAlvo ? ` (alvo: "${contratoAlvo}")` : " (todos)"}`);
       }
-      console.log(`[Extractor] Extrações atualizadas: devedor ${devedorId}, ${extracoesDev.length} contrato(s)`);
     }
   }
 }
@@ -437,6 +501,10 @@ export async function processarItemTriagem(
     const campos = await extrairCamposDeDocumentoIdentificado(
       item.nomeArquivo, buf, item.mimeType, item.docConfig
     );
+
+    // Propagar o contrato identificado na triagem para a gravação
+    campos.numeroContratoIdentificado = item.numeroContratoNoNome ?? null;
+    console.log(`[Extractor] Contrato alvo para gravação: ${campos.numeroContratoIdentificado ?? "(todos)"}`);
 
     // Gravar no banco
     await gravarExtracoes(devedorId, loteId, campos);

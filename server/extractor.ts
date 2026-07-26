@@ -14,7 +14,7 @@
 import { getDb } from "./db";
 import { clientes, docConfigs, extracoes, devedores } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
-import { storageGetSignedUrl } from "./storage";
+import { ENV } from "./_core/env";
 
 // Tipos para as regras de configuração
 interface RegrasIdentificacao {
@@ -144,10 +144,29 @@ async function extrairTextoPDF(buffer: Buffer): Promise<string | null> {
 
 /**
  * Baixa o arquivo do S3 e retorna o buffer.
+ * Usa o proxy interno do Forge para evitar problemas com URLs assinadas expiradas.
  */
 async function baixarArquivo(fileKey: string): Promise<Buffer | null> {
   try {
-    const url = await storageGetSignedUrl(fileKey);
+    // Usar a URL de presign via Forge API (server-side, não expira durante o download)
+    const forgeUrl = ENV.forgeApiUrl?.replace(/\/+$/, "");
+    const forgeKey = ENV.forgeApiKey;
+    if (!forgeUrl || !forgeKey) {
+      console.error("[Extractor] Forge API não configurada");
+      return null;
+    }
+    const normalizedKey = fileKey.replace(/^\/+/, "");
+    const presignUrl = new URL("v1/storage/presign/get", forgeUrl + "/");
+    presignUrl.searchParams.set("path", normalizedKey);
+    const presignResp = await fetch(presignUrl, {
+      headers: { Authorization: `Bearer ${forgeKey}` },
+    });
+    if (!presignResp.ok) {
+      console.error("[Extractor] Falha ao obter URL assinada:", presignResp.status);
+      return null;
+    }
+    const { url } = (await presignResp.json()) as { url: string };
+    if (!url) { console.error("[Extractor] URL assinada vazia"); return null; }
     const resp = await fetch(url);
     if (!resp.ok) {
       console.error("[Extractor] Erro ao baixar arquivo:", resp.status, resp.statusText);
@@ -186,10 +205,12 @@ async function buscarDocConfigsDoCliente(cooperativa: string): Promise<DocConfig
     console.log(`[Extractor] Nenhum cliente encontrado para cooperativa: "${cooperativa}"`);
     return [];
   }
+  console.log(`[Extractor] Cliente encontrado: "${clienteMatch.nomeFantasia}" (id=${clienteMatch.id}) para cooperativa "${cooperativa}"`);
 
   // Buscar docConfigs configuradas para esse cliente
   const configs = await db.select().from(docConfigs)
     .where(and(eq(docConfigs.clienteId, clienteMatch.id), eq(docConfigs.ativo, 1)));
+  console.log(`[Extractor] ${configs.length} docConfig(s) encontrada(s) para cliente ${clienteMatch.id}`);
 
   return configs
     .filter((c) => c.configJson || c.regrasIdentificacao)
@@ -205,12 +226,14 @@ async function buscarDocConfigsDoCliente(cooperativa: string): Promise<DocConfig
           regrasId = cfg.regrasIdentificacao ?? null;
           camposExt = cfg.camposExtracao ?? [];
           mapeamento = cfg.mapeamentoCampos ?? null;
+          console.log(`[Extractor] DocConfig ${c.id} (${c.nomeDocumento}): regrasId=${JSON.stringify(regrasId)}, campos=${camposExt.length}`);
         } catch { /* ignorar */ }
       }
 
       // Fallback: regrasIdentificacao salvo separadamente
       if (!regrasId && c.regrasIdentificacao) {
         try { regrasId = JSON.parse(c.regrasIdentificacao) as RegrasIdentificacao; } catch { /* ignorar */ }
+        if (regrasId) console.log(`[Extractor] DocConfig ${c.id} (${c.nomeDocumento}): regrasId via fallback=${JSON.stringify(regrasId)}`);
       }
 
       return {
@@ -243,6 +266,11 @@ async function extrairCamposDeDocumento(
       docConfigIdentificada = cfg;
       break;
     }
+  }
+  if (!docConfigIdentificada) {
+    console.log(`[Extractor] Nenhuma docConfig identificou pelo nome "${nomeArquivo}". Palavras testadas:`,
+      docConfigsCliente.map(c => ({ doc: c.nomeDocumento, palavras: c.regrasIdentificacao?.palavrasChaveNomeArquivo }))
+    );
   }
 
   // 2. Se não identificou pelo nome, tentar pelo conteúdo (apenas PDFs)

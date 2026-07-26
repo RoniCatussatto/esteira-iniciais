@@ -78,6 +78,29 @@ export default function DocumentosPage() {
   const [expandedDevedores, setExpandedDevedores] = useState<Set<number>>(new Set());
   const [addingToDevedor, setAddingToDevedor] = useState<number | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [extraindo, setExtraindo] = useState(false);
+
+  const extrairLoteMut = trpc.documentos.extrairLote.useMutation({
+    onSuccess: (data) => {
+      if (data.extraidos > 0) {
+        toast.success(`Extração concluída: ${data.extraidos} documento(s) identificado(s) em ${data.devedoresProcessados} devedor(es).`);
+      } else if (data.devedoresProcessados === 0) {
+        toast.info("Nenhum devedor com documentos para extrair.");
+      } else {
+        toast.info("Documentos enviados, mas nenhum foi identificado pelas regras configuradas.");
+      }
+      navigate(`/lote/${loteId}/revisao`);
+    },
+    onError: (e) => {
+      toast.error("Erro na extração: " + e.message);
+      navigate(`/lote/${loteId}/revisao`);
+    },
+  });
+
+  async function handleAvancar() {
+    setExtraindo(true);
+    extrairLoteMut.mutate({ loteId });
+  }
   const addFileRef = useRef<HTMLInputElement>(null);
 
   const deleteMutation = trpc.documentos.delete.useMutation({
@@ -222,10 +245,15 @@ async function handleAddDocToDevedor(devedorId: number, files: FileList) {
           </div>
           <Button
             size="sm"
-            onClick={() => navigate(`/lote/${loteId}/revisao`)}
+            onClick={handleAvancar}
+            disabled={extraindo}
             className="gap-2 ml-auto"
           >
-            Avançar — Revisar Dados <ArrowRight className="w-4 h-4" />
+            {extraindo ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Extraindo dados...</>
+            ) : (
+              <>Avançar — Revisar Dados <ArrowRight className="w-4 h-4" /></>
+            )}
           </Button>
         </div>
       </header>

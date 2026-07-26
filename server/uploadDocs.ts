@@ -2,8 +2,6 @@ import { Router } from "express";
 import multer from "multer";
 import { getDevedoresByLote, createDocumento } from "./db";
 import { storagePut } from "./storage";
-import { processarDocumentoUploadado } from "./extractor";
-import { getLoteById } from "./db";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -144,21 +142,6 @@ uploadDocsRouter.post("/:loteId/devedor/:devedorId", upload.array("files", 100),
       adicionados.push(file.originalname);
       uploadedFiles.push({ file, fileKey });
     }
-    // Extração automática em background (não bloqueia a resposta)
-    const lote = await getLoteById(loteId).catch(() => null);
-    if (lote?.cooperativa) {
-      for (const { file, fileKey } of uploadedFiles) {
-        processarDocumentoUploadado({
-          fileKey,
-          nomeArquivo: file.originalname,
-          mimeType: file.mimetype,
-          buffer: file.buffer,
-          devedorId,
-          loteId,
-          cooperativa: lote.cooperativa,
-        }).catch((e) => console.error("[UploadDocs/Direto] Erro na extração:", e));
-      }
-    }
     return res.json({ success: true, adicionados });
   } catch (err: unknown) {
     console.error("[UploadDocs/Direto] Erro:", err);
@@ -187,7 +170,6 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
     }
 
     // Buscar lote para obter cooperativa (necessário para extração)
-    const lote = await getLoteById(loteId).catch(() => null);
 
     const resultados: Array<{
       arquivo: string;
@@ -199,7 +181,6 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
     }> = [];
 
     const semVinculo: string[] = [];
-    const paraExtracao: Array<{ file: Express.Multer.File; fileKey: string; devedorId: number }> = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -232,7 +213,6 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
           score: Math.round(match.score * 100),
           fileUrl: url,
         });
-        paraExtracao.push({ file, fileKey, devedorId: match.devedorId });
       } else {
         semVinculo.push(`${nomePasta}/${file.originalname}`);
         resultados.push({
@@ -253,20 +233,6 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
       semVinculo: semVinculo.length,
       resultados,
     });
-    // Extração automática em background (após enviar a resposta)
-    if (lote?.cooperativa && paraExtracao.length > 0) {
-      for (const { file, fileKey, devedorId } of paraExtracao) {
-        processarDocumentoUploadado({
-          fileKey,
-          nomeArquivo: file.originalname,
-          mimeType: file.mimetype,
-          buffer: file.buffer,
-          devedorId,
-          loteId,
-          cooperativa: lote!.cooperativa!,
-        }).catch((e) => console.error("[UploadDocs/Batch] Erro na extração:", e));
-      }
-    }
   } catch (err: unknown) {
     console.error("[UploadDocs] Erro:", err);
     const message = err instanceof Error ? err.message : "Erro interno";

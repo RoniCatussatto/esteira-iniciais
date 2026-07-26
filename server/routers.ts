@@ -103,6 +103,34 @@ export const appRouter = router({
         }
         return { extraidos };
       }),
+    // Disparar extração automática para TODOS os devedores de um lote
+    extrairLote: publicProcedure
+      .input(z.object({ loteId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { loteId } = input;
+        const lote = await getLoteById(loteId);
+        if (!lote?.cooperativa) return { extraidos: 0, devedoresProcessados: 0, erro: "Cooperativa não encontrada no lote" };
+        const devedoresLote = await getDevedoresByLote(loteId);
+        let extraidos = 0;
+        let devedoresProcessados = 0;
+        for (const dev of devedoresLote) {
+          const docs = await getDocumentosByDevedor(dev.id);
+          if (docs.length === 0) continue;
+          devedoresProcessados++;
+          for (const doc of docs) {
+            const resultado = await processarDocumentoUploadado({
+              fileKey: doc.fileKey,
+              nomeArquivo: doc.nomeArquivo,
+              mimeType: doc.mimeType,
+              devedorId: dev.id,
+              loteId,
+              cooperativa: lote.cooperativa,
+            });
+            if (resultado) extraidos++;
+          }
+        }
+        return { extraidos, devedoresProcessados };
+      }),
   }),
 
   devedores: router({

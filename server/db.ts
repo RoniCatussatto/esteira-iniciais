@@ -283,6 +283,31 @@ export async function getClienteById(id: number) {
   return result[0] ?? null;
 }
 
+/** Normaliza string para comparação: minúsculas, sem acentos. */
+function normStr(s: string): string {
+  const str = typeof s === "string" ? s : String(s);
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+/**
+ * Busca o modeloPadrao de um cliente pelo nome da cooperativa (matching fuzzy).
+ * Retorna null se não encontrar cliente correspondente ou se não tiver modeloPadrao.
+ */
+export async function getModeloPadraoByCooperativa(cooperativa: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const todosClientes = await db.select().from(clientes);
+  const coopNorm = normStr(cooperativa);
+  let match = todosClientes.find((c) => normStr(c.nomeFantasia) === coopNorm);
+  if (!match) {
+    match = todosClientes.find((c) => {
+      const cn = normStr(c.nomeFantasia);
+      return cn.includes(coopNorm) || coopNorm.includes(cn);
+    });
+  }
+  return match?.modeloPadrao ?? null;
+}
+
 export async function createCliente(data: InsertCliente) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

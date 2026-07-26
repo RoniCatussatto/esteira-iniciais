@@ -79,6 +79,8 @@ export const devedores = mysqlTable("devedores", {
   dadoPlanilha04: text("dadoPlanilha04"),
   multa2pct: mysqlEnum("multa2pct", ["sim", "nao", "branco"]).default("branco"),
   moraEspecifica: text("moraEspecifica"),
+  // Etapa Definir Inicial
+  modeloInicial: varchar("modeloInicial", { length: 100 }), // Ex: "CAC", "COB CCB", "EXEC CONFISSAO"
   status: mysqlEnum("status", ["pendente", "em_processamento", "concluido", "erro"]).default("pendente").notNull(),
   observacoes: text("observacoes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -123,6 +125,8 @@ export const extracoes = mysqlTable("extracoes", {
   dadoPlanilha04: text("dadoPlanilha04"),
   multa2pct: mysqlEnum("multa2pct", ["sim", "nao", "branco"]).default("branco"),
   moraEspecifica: text("moraEspecifica"),
+  // Índice de correção monetária para este contrato (definido na etapa Definir Inicial)
+  indiceCorrecao: mysqlEnum("indiceCorrecao", ["ipca", "selic"]).default("ipca"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

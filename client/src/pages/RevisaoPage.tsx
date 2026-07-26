@@ -13,6 +13,7 @@ import {
   FileText, FileImage, CheckCircle, Clock, Save, Loader2,
   User, Car, FileCheck, Plus, Trash2,
 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Wand2 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -502,6 +503,13 @@ export default function RevisaoPage() {
               Etapa 3 — Revisão e Extração de Dados · {totalComDados}/{totalDevedores} devedor(es) com dados preenchidos
             </p>
           </div>
+          <Button
+            size="sm"
+            className="gap-2 ml-auto"
+            onClick={() => navigate(`/lote/${loteId}/definir-inicial`)}
+          >
+            Avançar — Definir Inicial <ArrowRight className="w-4 h-4" />
+          </Button>
         </div>
       </header>
 

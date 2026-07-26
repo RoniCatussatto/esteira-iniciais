@@ -98,3 +98,18 @@
 - [x] Procedures tRPC: list, ultimoIndice, upsert, update, delete
 - [x] Página /indices com tabela, filtro por ano, cards de resumo e edição inline
 - [x] Link "Índices" no header da Home ao lado de Configurações
+
+## Etapa Definir Inicial (/lote/:id/definir-inicial)
+- [x] Adicionar campo `indiceCorrecao` (enum: ipca|selic) na tabela `extracoes`
+- [x] Adicionar campo `modeloInicial` (varchar 100) na tabela `devedores`
+- [x] Migrar schema e aplicar no banco
+- [x] Procedure tRPC: salvar modeloInicial de um devedor
+- [x] Procedure tRPC: salvar indiceCorrecao de uma extração
+- [x] Botão "Avançar — Definir Inicial" na RevisaoPage
+- [x] Criar página DefinirInicialPage (/lote/:id/definir-inicial)
+- [x] Header com botão Voltar, título e contador de devedores
+- [x] Para cada devedor: card com nome, documentos (chips clicáveis), campo Modelo da Inicial (pré-preenchido com modeloPadrao da cliente)
+- [x] Para cada devedor: tabela de contratos com dp01, dp02, dp03, dp04, multa (2% ou 0%), índice (IPCA/Selic toggle)
+- [x] Índice pré-preenchido automaticamente: cartão/cheque especial → Selic, demais → IPCA
+- [x] Salvar automaticamente ao alterar índice (toggle) e botão Salvar por devedor para o modelo
+- [x] Registrar rota /lote/:id/definir-inicial no App.tsx

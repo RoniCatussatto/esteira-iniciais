@@ -11,6 +11,7 @@ import RevisaoPage from "./pages/RevisaoPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import DocConfigPage from "./pages/DocConfigPage";
 import IndicesPage from "./pages/IndicesPage";
+import DefinirInicialPage from "./pages/DefinirInicialPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -19,6 +20,7 @@ function Router() {
       <Route path={"/lote/:id"} component={LotePage} />
       <Route path={"/lote/:id/documentos"} component={DocumentosPage} />
       <Route path={"/lote/:id/revisao"} component={RevisaoPage} />
+      <Route path={"/lote/:id/definir-inicial"} component={DefinirInicialPage} />
       <Route path={"/configuracoes"} component={ConfiguracoesPage} />
       <Route path={"/configuracoes/cliente/:clienteId/doc/:docConfigId"} component={DocConfigPage} />
       <Route path={"/indices"} component={IndicesPage} />

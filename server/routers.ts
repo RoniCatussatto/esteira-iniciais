@@ -20,6 +20,7 @@ import {
   deleteLote,
   deleteLotesAntigos,
 } from "./db";
+import { getModeloPadraoByCooperativa } from "./db";
 import {
   getDocumentosByLote,
   getDocumentosByDevedor,
@@ -74,6 +75,9 @@ export const appRouter = router({
     getById: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(({ input }) => getLoteById(input.id)),
+    getModeloPadrao: publicProcedure
+      .input(z.object({ cooperativa: z.string() }))
+      .query(({ input }) => getModeloPadraoByCooperativa(input.cooperativa)),
     getDevedores: publicProcedure
       .input(z.object({ loteId: z.number() }))
       .query(({ input }) => getDevedoresByLote(input.loteId)),
@@ -237,6 +241,16 @@ export const appRouter = router({
         const { id, ...data } = input;
         return updateDevedor(id, data);
       }),
+    // Salvar modelo de inicial (Etapa Definir Inicial)
+    saveModeloInicial: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        modeloInicial: z.string().nullable(),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        return updateDevedor(id, data);
+      }),
   }),
 
   extracoes: router({
@@ -280,6 +294,16 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => deleteExtracao(input.id)),
+    // Salvar índice de correção de uma extração (Etapa Definir Inicial)
+    saveIndice: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        indiceCorrecao: z.enum(["ipca", "selic"]),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        return updateExtracao(id, data);
+      }),
   }),
 
   clientes: router({

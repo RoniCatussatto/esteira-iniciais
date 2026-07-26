@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Check, X, Plus, TrendingUp, Calendar, ArrowUp, ArrowDown } from "lucide-react";
+import { Pencil, Check, X, Plus, TrendingUp, Calendar, ArrowUp, ArrowDown, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
 const MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
 
@@ -97,15 +98,21 @@ export default function IndicesPage() {
   }
 
   return (
-    <div className="container py-8 max-w-4xl mx-auto px-4">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <TrendingUp className="w-6 h-6 text-primary" />
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
+        <Link href="/">
+          <Button variant="ghost" size="sm" className="gap-1.5">
+            <ArrowLeft className="w-4 h-4" />
+            Início
+          </Button>
+        </Link>
+        <div className="flex-1">
+          <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" />
             Índices de Correção
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="text-sm text-gray-500">
             Valores mensais de IPCA e Selic acumulados utilizados nos cálculos de atualização monetária.
           </p>
         </div>
@@ -114,6 +121,8 @@ export default function IndicesPage() {
           Novo Índice
         </Button>
       </div>
+
+      <div className="container py-8 max-w-4xl mx-auto px-4">
 
       {/* Último índice disponível */}
       {ultimoIndice && (
@@ -295,6 +304,7 @@ export default function IndicesPage() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

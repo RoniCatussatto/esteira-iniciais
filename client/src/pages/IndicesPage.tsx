@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Check, X, Plus, TrendingUp, Calendar, ArrowUp, ArrowDown, ArrowLeft } from "lucide-react";
+import { Pencil, Check, X, Plus, TrendingUp, Calendar, ArrowUp, ArrowDown, ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
@@ -287,6 +287,20 @@ export default function IndicesPage() {
                               </Button>
                               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(null)}>
                                 <X className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => {
+                                  if (confirm(`Excluir o índice "${ind.dataTexto}"? Esta ação não pode ser desfeita.`)) {
+                                    deleteMut.mutate({ id: ind.id });
+                                  }
+                                }}
+                                disabled={deleteMut.isPending}
+                                title="Excluir índice"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             </div>
                           ) : (

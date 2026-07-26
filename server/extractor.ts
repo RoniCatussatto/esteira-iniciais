@@ -20,6 +20,7 @@ interface RegrasIdentificacao {
   palavrasChaveNomeArquivo?: string[];
   palavrasChaveConteudo?: string[];
   descricao?: string;
+  palavrasExclusaoNomeArquivo?: string[];
 }
 
 interface CampoExtracao {
@@ -101,7 +102,12 @@ function identificarPeloNome(nomeArquivo: string, regras: RegrasIdentificacao): 
   const nomeNorm = normStr(nomeArquivo);
   const palavras = regras.palavrasChaveNomeArquivo ?? [];
   if (palavras.length === 0) return false;
-  return palavras.some((p) => nomeNorm.includes(normStr(p)));
+  const contemPalavraChave = palavras.some((p) => nomeNorm.includes(normStr(p)));
+  if (!contemPalavraChave) return false;
+  // Verificar palavras de exclusão: se o nome contiver alguma, não identificar
+  const exclusoes = regras.palavrasExclusaoNomeArquivo ?? [];
+  if (exclusoes.some((e) => nomeNorm.includes(normStr(e)))) return false;
+  return true;
 }
 
 /** Verifica se o conteúdo do documento contém alguma das palavras-chave. */

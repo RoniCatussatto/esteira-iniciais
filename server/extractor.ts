@@ -571,7 +571,7 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
   const db = await getDb();
   if (!db) return;
 
-  const extracoesDev = await db.select().from(extracoes).where(eq(extracoes.devedorId, devedorId));
+  const extracoesDev = await db.select().from(extracoes).where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
 
   // Determinar o contrato alvo: usar o número identificado no nome do arquivo
   const contratoAlvo = campos.numeroContratoIdentificado?.trim() ?? null;
@@ -627,10 +627,17 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
       for (const ext of extParaAtualizar) {
         // Montar updateData respeitando campos já preenchidos: só sobrescreve se o campo atual for nulo/vazio
         const updateDataPorExt: Record<string, unknown> = {};
-        if (campos.dadoPlanilha01 !== undefined && !ext.dadoPlanilha01) updateDataPorExt.dadoPlanilha01 = campos.dadoPlanilha01;
-        if (campos.dadoPlanilha02 !== undefined && !ext.dadoPlanilha02) updateDataPorExt.dadoPlanilha02 = campos.dadoPlanilha02;
-        if (campos.dadoPlanilha03 !== undefined && !ext.dadoPlanilha03) updateDataPorExt.dadoPlanilha03 = campos.dadoPlanilha03;
-        if (campos.dadoPlanilha04 !== undefined && !ext.dadoPlanilha04) updateDataPorExt.dadoPlanilha04 = campos.dadoPlanilha04;
+        const dp01Atual = ext.dadoPlanilha01;
+        const dp02Atual = ext.dadoPlanilha02;
+        const dp03Atual = ext.dadoPlanilha03;
+        const dp04Atual = ext.dadoPlanilha04;
+        console.log(`[Extractor] Contrato ${ext.numeroContrato}: dp01="${dp01Atual}" dp02="${dp02Atual}" dp03="${dp03Atual}" dp04="${dp04Atual}"`);
+        console.log(`[Extractor] Novos valores: dp01="${campos.dadoPlanilha01}" dp02="${campos.dadoPlanilha02}" dp03="${campos.dadoPlanilha03}" dp04="${campos.dadoPlanilha04}"`);
+        if (campos.dadoPlanilha01 !== undefined && (dp01Atual === null || dp01Atual === undefined || dp01Atual === '')) updateDataPorExt.dadoPlanilha01 = campos.dadoPlanilha01;
+        if (campos.dadoPlanilha02 !== undefined && (dp02Atual === null || dp02Atual === undefined || dp02Atual === '')) updateDataPorExt.dadoPlanilha02 = campos.dadoPlanilha02;
+        if (campos.dadoPlanilha03 !== undefined && (dp03Atual === null || dp03Atual === undefined || dp03Atual === '')) updateDataPorExt.dadoPlanilha03 = campos.dadoPlanilha03;
+        if (campos.dadoPlanilha04 !== undefined && (dp04Atual === null || dp04Atual === undefined || dp04Atual === '')) updateDataPorExt.dadoPlanilha04 = campos.dadoPlanilha04;
+        console.log(`[Extractor] updateData para ${ext.numeroContrato}:`, JSON.stringify(updateDataPorExt));
         // multa2pct e moraEspecifica: sobrescreve apenas se ainda "branco"/nulo
         if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco")) updateDataPorExt.multa2pct = campos.multa2pct;
         if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) updateDataPorExt.moraEspecifica = campos.moraEspecifica;

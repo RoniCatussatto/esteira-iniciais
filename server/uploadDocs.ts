@@ -2,6 +2,8 @@ import { Router } from "express";
 import multer from "multer";
 import { getDevedoresByLote, createDocumento } from "./db";
 import { storagePut } from "./storage";
+import { getLoteById } from "./db";
+import { triarDocumentos, processarItemTriagem } from "./extractor";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -124,7 +126,17 @@ uploadDocsRouter.post("/:loteId/devedor/:devedorId", upload.array("files", 100),
     if (!files || files.length === 0) return res.status(400).json({ error: "Nenhum arquivo enviado" });
 
     const adicionados: string[] = [];
-    const uploadedFiles: Array<{ file: Express.Multer.File; fileKey: string }> = [];
+    const lote = await getLoteById(loteId);
+    const cooperativa = lote?.cooperativa ?? null;
+
+    // Triagem por nome antes de fazer upload
+    const triagem = cooperativa
+      ? await triarDocumentos(
+          files.map(f => ({ fileKey: "", nomeArquivo: f.originalname, mimeType: f.mimetype })),
+          cooperativa
+        )
+      : null;
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const fileKey = `lote-${loteId}/docs/${Date.now()}-${i}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
@@ -140,7 +152,20 @@ uploadDocsRouter.post("/:loteId/devedor/:devedorId", upload.array("files", 100),
         tamanho: file.size,
       });
       adicionados.push(file.originalname);
-      uploadedFiles.push({ file, fileKey });
+
+      // Extração automática com buffer em memória (evita problema de 403 no S3)
+      if (triagem) {
+        const itemIdentificado = triagem.identificados.find(
+          (item) => item.nomeArquivo === file.originalname
+        );
+        if (itemIdentificado) {
+          // Atualizar fileKey no item (não estava disponível na triagem)
+          const itemComKey = { ...itemIdentificado, fileKey };
+          processarItemTriagem(itemComKey, devedorId, loteId, file.buffer).catch((err) => {
+            console.error("[UploadDocs/Direto] Erro na extração:", err);
+          });
+        }
+      }
     }
     return res.json({ success: true, adicionados });
   } catch (err: unknown) {
@@ -170,6 +195,8 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
     }
 
     // Buscar lote para obter cooperativa (necessário para extração)
+    const lote = await getLoteById(loteId);
+    const cooperativa = lote?.cooperativa ?? null;
 
     const resultados: Array<{
       arquivo: string;
@@ -213,6 +240,18 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
           score: Math.round(match.score * 100),
           fileUrl: url,
         });
+        // Extração automática com buffer em memória
+        if (cooperativa && match.devedorId) {
+          const triagem = await triarDocumentos(
+            [{ fileKey, nomeArquivo: file.originalname, mimeType: file.mimetype }],
+            cooperativa
+          );
+          if (triagem.identificados.length > 0) {
+            processarItemTriagem(triagem.identificados[0], match.devedorId, loteId, file.buffer).catch((err) => {
+              console.error("[UploadDocs/Batch] Erro na extração:", err);
+            });
+          }
+        }
       } else {
         semVinculo.push(`${nomePasta}/${file.originalname}`);
         resultados.push({

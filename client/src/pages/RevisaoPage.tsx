@@ -236,6 +236,10 @@ function DevedorCard({
     },
     onError: (e) => toast.error("Erro na extração: " + e.message),
   });
+  // Nota: a extração automática ocorre no momento do upload.
+  // O botão "Extrair Dados" serve para re-extração de documentos já enviados,
+  // mas pode falhar se o arquivo não puder ser baixado do armazenamento.
+  // Nesse caso, faça o upload novamente para que a extração ocorra automaticamente.
 
   function handleExpand() {
     if (!expanded && extracoes.length === 0 && dev.contratos) {

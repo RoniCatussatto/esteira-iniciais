@@ -107,6 +107,9 @@ export const appRouter = router({
           naoIdentificados: triagem.naoIdentificados,
         };
       }),
+    // Nota: o botão "Extrair Dados" tenta baixar do S3 via URL assinada.
+    // Para documentos já enviados, a extração é feita no momento do upload (buffer em memória).
+    // O botão "Extrair Dados" serve para re-extração forçada, mas pode falhar se o arquivo não puder ser baixado.
     // Disparar extração automática para TODOS os devedores de um lote
     extrairLote: publicProcedure
       .input(z.object({ loteId: z.number() }))

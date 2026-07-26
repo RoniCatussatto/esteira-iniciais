@@ -64,6 +64,13 @@
       "when": 1785080890072,
       "tag": "0008_bitter_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1785095449594,
+      "tag": "0009_material_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

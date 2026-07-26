@@ -318,6 +318,7 @@ export const appRouter = router({
         municipio: z.string().nullable().optional(),
         paragrafaInicial: z.string().nullable().optional(),
         enderecoCoop: z.string().nullable().optional(),
+        modeloPadrao: z.string().nullable().optional(),
       }))
       .mutation(({ input }) => {
         const { id, ...data } = input;

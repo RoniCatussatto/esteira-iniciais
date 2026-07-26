@@ -50,6 +50,7 @@ type Cliente = {
   municipio: string | null;
   paragrafaInicial: string | null;
   enderecoCoop: string | null;
+  modeloPadrao: string | null;
 };
 
 type DocConfig = {
@@ -74,6 +75,7 @@ const EMPTY_CLIENTE: Omit<Cliente, "id"> = {
   municipio: null,
   paragrafaInicial: null,
   enderecoCoop: null,
+  modeloPadrao: null,
 };
 
 function ClienteForm({
@@ -186,6 +188,19 @@ function ClienteForm({
             rows={4}
             placeholder="Texto descritivo da cliente para uso nas petições iniciais"
           />
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs font-medium text-gray-600 mb-1 block">
+            Modelo Padrão de Petição Inicial
+          </label>
+          <Input
+            value={form.modeloPadrao ?? ""}
+            onChange={(e) => set("modeloPadrao", e.target.value)}
+            placeholder="Ex: CAC, COB CCB, EXEC CONFISSAO"
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Será pré-preenchido automaticamente para todos os casos desta cliente na etapa de revisão.
+          </p>
         </div>
       </div>
       <div className="flex gap-2 justify-end pt-2">
@@ -309,6 +324,14 @@ function ClienteCard({ cliente, onEdit, onDelete }: {
                 <div className="col-span-2 mt-1">
                   <p className="text-gray-500 text-xs mb-0.5">Parágrafo inicial:</p>
                   <p className="text-gray-700 text-xs italic leading-relaxed">{cliente.paragrafaInicial}</p>
+                </div>
+              )}
+              {cliente.modeloPadrao && (
+                <div className="col-span-2 mt-1">
+                  <span className="text-gray-500 text-xs">Modelo padrão: </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 ml-1">
+                    {cliente.modeloPadrao}
+                  </span>
                 </div>
               )}
             </div>
@@ -545,6 +568,7 @@ export default function ConfiguracoesPage() {
               municipio: editingCliente.municipio,
               paragrafaInicial: editingCliente.paragrafaInicial,
               enderecoCoop: editingCliente.enderecoCoop,
+              modeloPadrao: editingCliente.modeloPadrao,
             } : EMPTY_CLIENTE}
             onSave={handleSave}
             onCancel={() => { setDialogOpen(false); setEditingCliente(null); }}

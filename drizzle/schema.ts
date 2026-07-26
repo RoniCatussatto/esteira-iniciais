@@ -148,6 +148,7 @@ export const clientes = mysqlTable("clientes", {
   municipio: varchar("municipio", { length: 255 }),
   paragrafaInicial: text("paragrafaInicial"),
   enderecoCoop: text("enderecoCoop"),
+  modeloPadrao: varchar("modeloPadrao", { length: 100 }), // Modelo padrão de petição inicial (ex: "CAC", "COB CCB")
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

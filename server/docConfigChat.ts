@@ -62,12 +62,21 @@ Cada devedor pode ter MÚLTIPLOS contratos. Um documento deve atualizar APENAS o
     }
   ],
   "mapeamentoCampos": {
-    "dadoPlanilha01": "Número da conta cartão",
-    "dadoPlanilha02": "Número do contrato (do nome do arquivo)",
+    "dadoPlanilha01": "dadoPlanilha01",
+    "dadoPlanilha02": "dadoPlanilha02",
     "multa2pct": "nao"
   }
 }
 \`\`\`
+
+## REGRA CRÍTICA: mapeamentoCampos
+
+O valor de cada entrada em mapeamentoCampos deve ser:
+- O **nome exato do campo intermediário** (ex: "dadoPlanilha01": "dadoPlanilha01") para referenciar o valor extraído por aquele campo
+- Um **valor fixo de texto** SOMENTE para campos especiais como multa2pct ("sim", "nao", "branco") ou moraEspecifica
+- Um **objeto condicional** para lógica de condição (ver abaixo)
+
+**NUNCA use strings descritivas** como "dadoPlanilha01": "Número da conta cartão" — isso grava o texto descritivo literalmente no banco em vez do valor extraído.
 
 ## Regras para campos especiais
 

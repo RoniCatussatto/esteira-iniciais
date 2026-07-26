@@ -101,7 +101,13 @@ export const appRouter = router({
         );
         // Extração: processar apenas os identificados
         let extraidos = 0;
-        for (const item of triagem.identificados) {
+        // Ordenar: Fatura primeiro, depois demais documentos (Extrato não sobrescreve campos da Fatura)
+        const identificadosOrdenados = [...triagem.identificados].sort((a, b) => {
+          const prioA = a.docConfig.nomeDocumento === "Fatura" ? 0 : 1;
+          const prioB = b.docConfig.nomeDocumento === "Fatura" ? 0 : 1;
+          return prioA - prioB;
+        });
+        for (const item of identificadosOrdenados) {
           // Usar textoExtraido do banco se disponível (evita 403 ao baixar do S3)
           const docComTexto = docs.find(d => d.nomeArquivo === item.nomeArquivo && d.textoExtraido);
           const resultado = docComTexto?.textoExtraido
@@ -163,7 +169,13 @@ export const appRouter = router({
             docs.map(d => ({ fileKey: d.fileKey, nomeArquivo: d.nomeArquivo, mimeType: d.mimeType })),
             lote.cooperativa
           );
-          for (const item of triagem.identificados) {
+          // Ordenar: Fatura primeiro, depois demais documentos (Extrato não sobrescreve campos da Fatura)
+          const identificadosOrdenados2 = [...triagem.identificados].sort((a, b) => {
+            const prioA = a.docConfig.nomeDocumento === "Fatura" ? 0 : 1;
+            const prioB = b.docConfig.nomeDocumento === "Fatura" ? 0 : 1;
+            return prioA - prioB;
+          });
+          for (const item of identificadosOrdenados2) {
             // Usar textoExtraido do banco se disponível (evita 403 ao baixar do S3)
             const docComTexto = docs.find(d => d.nomeArquivo === item.nomeArquivo && d.textoExtraido);
             const resultado = docComTexto?.textoExtraido

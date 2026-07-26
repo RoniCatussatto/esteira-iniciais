@@ -222,9 +222,23 @@ export default function DocConfigPage() {
       const configMatch = fullContent.match(/<CONFIG_FINAL>([\s\S]*?)<\/CONFIG_FINAL>/);
       if (configMatch) {
         try {
-          // Remover blocos de código markdown (```json ... ``` ou ``` ... ```) antes do parse
+          // Estratégia robusta para extrair JSON do conteúdo retornado pelo LLM:
+          // 1. Tentar extrair bloco ```json ... ``` de qualquer posição no texto
+          // 2. Se não encontrar, tentar extrair o primeiro objeto JSON { ... }
+          // 3. Fallback: usar o texto completo limpo
           let rawJson = configMatch[1].trim();
-          rawJson = rawJson.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+          const codeBlockMatch = rawJson.match(/```(?:json)?\s*([\s\S]*?)```/i);
+          if (codeBlockMatch) {
+            rawJson = codeBlockMatch[1].trim();
+          } else {
+            // Remover possíveis marcadores de início/fim de bloco soltos
+            rawJson = rawJson.replace(/^```(?:json)?\s*/im, "").replace(/\s*```\s*$/m, "").trim();
+          }
+          // Extrair o primeiro objeto JSON completo { ... } se ainda houver texto ao redor
+          if (!rawJson.startsWith("{")) {
+            const jsonObjMatch = rawJson.match(/(\{[\s\S]*\})/);
+            if (jsonObjMatch) rawJson = jsonObjMatch[1].trim();
+          }
           const configData = JSON.parse(rawJson);
           // Salvar configuração automaticamente
           const saveResp = await fetch("/api/doc-config-chat/save-config", {

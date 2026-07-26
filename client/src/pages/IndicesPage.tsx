@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Check, X, Plus, TrendingUp, Calendar } from "lucide-react";
+import { Pencil, Check, X, Plus, TrendingUp, Calendar, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 
 const MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -40,6 +40,8 @@ export default function IndicesPage() {
 
   const [editing, setEditing] = useState<EditState>(null);
   const [filtroAno, setFiltroAno] = useState<string>("todos");
+  // Padrão sem filtro: decrescente (mais recentes primeiro). Com filtro: crescente.
+  const [ordemDesc, setOrdemDesc] = useState<boolean>(true);
   const [novoMesAno, setNovoMesAno] = useState("");
   const [novoIpca, setNovoIpca] = useState("");
   const [novoSelic, setNovoSelic] = useState("");
@@ -55,6 +57,18 @@ export default function IndicesPage() {
     if (filtroAno === "todos") return indices;
     return indices.filter(i => i.mesAno.startsWith(filtroAno));
   }, [indices, filtroAno]);
+
+  const indicesOrdenados = useMemo(() => {
+    const arr = [...indicesFiltrados];
+    return ordemDesc ? arr.reverse() : arr;
+  }, [indicesFiltrados, ordemDesc]);
+
+  // Quando o filtro muda, ajusta o padrão de ordenação
+  const handleFiltroAno = (val: string) => {
+    setFiltroAno(val);
+    // Sem filtro → decrescente; com filtro de ano → crescente
+    setOrdemDesc(val === "todos");
+  };
 
   const ultimoIndice = indices.length > 0 ? indices[indices.length - 1] : null;
 
@@ -177,10 +191,10 @@ export default function IndicesPage() {
         </Card>
       )}
 
-      {/* Filtro por ano */}
+      {/* Filtro por ano + botão de ordenação */}
       <div className="flex items-center gap-3 mb-4">
         <span className="text-sm text-muted-foreground">Filtrar por ano:</span>
-        <Select value={filtroAno} onValueChange={setFiltroAno}>
+        <Select value={filtroAno} onValueChange={handleFiltroAno}>
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>
@@ -192,6 +206,16 @@ export default function IndicesPage() {
           </SelectContent>
         </Select>
         <Badge variant="secondary">{indicesFiltrados.length} registros</Badge>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 ml-auto"
+          onClick={() => setOrdemDesc(v => !v)}
+          title={ordemDesc ? "Mais recentes primeiro — clique para inverter" : "Mais antigos primeiro — clique para inverter"}
+        >
+          {ordemDesc ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
+          {ordemDesc ? "Mais recentes primeiro" : "Mais antigos primeiro"}
+        </Button>
       </div>
 
       {/* Tabela */}
@@ -211,7 +235,7 @@ export default function IndicesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {indicesFiltrados.map((ind, idx) => {
+                  {indicesOrdenados.map((ind, idx) => {
                     const isEdit = editing?.id === ind.id;
                     const isLast = ind.mesAno === ultimoIndice?.mesAno;
                     return (

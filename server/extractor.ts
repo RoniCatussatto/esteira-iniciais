@@ -409,11 +409,19 @@ function _extrairCamposComTexto(
     }
   }
 
-  // Aplicar regras de extração dos camposExtracao
+  // ── Passo 1: Extrair todos os campos intermediários para um dicionário ──
+  const camposIntermedios: Record<string, string> = {};
+
+  // Adicionar número do contrato do nome do arquivo como campo especial
+  const contratoDoNome = extrairContratoDoNome(nomeArquivo, docConfig.camposExtracao);
+  if (contratoDoNome) {
+    camposIntermedios["numerocontratoarquivo"] = contratoDoNome;
+    camposIntermedios["numerocontrato"] = contratoDoNome;
+    camposIntermedios["contrato"] = contratoDoNome;
+  }
+
   for (const campo of docConfig.camposExtracao) {
     if (!campo.campo) continue;
-
-    let valorFinal: string | null = null;
 
     // Verificar se a extração é do nome do arquivo (não do conteúdo do PDF)
     const locNorm = normStr(campo.localizacao ?? "");
@@ -423,34 +431,62 @@ function _extrairCamposComTexto(
       const textoFonte = extrairDoNome ? nomeArquivo : textoPDF;
       const valorExtraido = aplicarRegex(textoFonte, campo.regex);
       if (valorExtraido) {
-        valorFinal = aplicarTransformacao(valorExtraido, campo.transformacao);
+        const valorFinal = aplicarTransformacao(valorExtraido, campo.transformacao);
+        if (valorFinal) {
+          const chave = normStr(campo.campo).replace(/[_\s]/g, "");
+          camposIntermedios[chave] = valorFinal;
+          console.log(`[Extractor] Campo intermediário "${campo.campo}" = "${valorFinal}"`);
+        }
       }
     }
-
-    if (!valorFinal) continue;
-
-    const campoNorm = campo.campo.toLowerCase().replace(/[_\s]/g, "");
-    atribuirCampo(resultado, campoNorm, valorFinal);
   }
 
-  // Aplicar valores fixos do mapeamentoCampos (ex: multa2pct: "nao")
+  // ── Passo 2: Aplicar mapeamentoCampos para preencher campos finais ──
   if (docConfig.mapeamentoCampos) {
     const mp = docConfig.mapeamentoCampos;
-    // multa2pct: se o valor for "sim", "nao" ou "branco" diretamente (valor fixo)
-    if (mp.multa2pct && resultado.multa2pct === undefined) {
-      const vNorm = normStr(mp.multa2pct);
-      if (vNorm === "sim" || vNorm === "nao" || vNorm === "branco") {
-        resultado.multa2pct = vNorm as "sim" | "nao" | "branco";
-        console.log(`[Extractor] multa2pct fixo: "${vNorm}"`);
+
+    for (const [campoFinal, valorMapeamento] of Object.entries(mp)) {
+      if (!valorMapeamento) continue;
+
+      let valorResolvido: string | null = null;
+
+      if (typeof valorMapeamento === "string") {
+        // Valor fixo (ex: "nao") ou referência a campo intermediário (ex: "modalidade")
+        const chaveRef = normStr(valorMapeamento).replace(/[_\s]/g, "");
+        if (camposIntermedios[chaveRef] !== undefined) {
+          // É uma referência a campo intermediário
+          valorResolvido = camposIntermedios[chaveRef];
+        } else {
+          // É um valor fixo
+          valorResolvido = valorMapeamento;
+        }
+      } else if (typeof valorMapeamento === "object" && "condicional" in (valorMapeamento as object)) {
+        // Mapeamento condicional: { condicional: { campo, contem, entao, senao } }
+        const cond = (valorMapeamento as { condicional: { campo: string; contem: string; entao: string | null; senao: string | null } }).condicional;
+        const campoCondNorm = normStr(cond.campo).replace(/[_\s]/g, "");
+        const valorCampoCond = camposIntermedios[campoCondNorm] ?? "";
+        const condicaoAtendida = normStr(valorCampoCond).includes(normStr(cond.contem));
+        const refEscolhida = condicaoAtendida ? cond.entao : cond.senao;
+
+        if (refEscolhida === null || refEscolhida === undefined) {
+          // Condição resulta em null — não preencher este campo
+          console.log(`[Extractor] Mapeamento condicional "${campoFinal}": condição=${condicaoAtendida}, resultado=null (não preencher)`);
+          continue;
+        }
+
+        const refNorm = normStr(refEscolhida).replace(/[_\s]/g, "");
+        if (camposIntermedios[refNorm] !== undefined) {
+          valorResolvido = camposIntermedios[refNorm];
+        } else {
+          // Pode ser valor fixo
+          valorResolvido = refEscolhida;
+        }
+        console.log(`[Extractor] Mapeamento condicional "${campoFinal}": campo="${cond.campo}"="${valorCampoCond}", contem="${cond.contem}"=${condicaoAtendida}, ref="${refEscolhida}" → "${valorResolvido}"`);
       }
-    }
-    // moraEspecifica: se o valor for um número ou texto fixo (não uma descrição de campo)
-    if (mp.moraEspecifica && resultado.moraEspecifica === undefined) {
-      const vNorm = mp.moraEspecifica.trim();
-      // Só aplicar se parecer um valor numérico (taxa) e não uma descrição
-      if (/^[\d.,]+%?$/.test(vNorm)) {
-        resultado.moraEspecifica = vNorm;
-        console.log(`[Extractor] moraEspecifica fixa: "${vNorm}"`);
+
+      if (valorResolvido !== null) {
+        const campoFinalNorm = normStr(campoFinal).replace(/[_\s]/g, "");
+        atribuirCampo(resultado, campoFinalNorm, valorResolvido);
       }
     }
   }

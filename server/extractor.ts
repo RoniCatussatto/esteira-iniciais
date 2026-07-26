@@ -540,11 +540,16 @@ function _extrairCamposComTexto(
           valorResolvido = valorMapeamento;
         }
       } else if (typeof valorMapeamento === "object" && "condicional" in (valorMapeamento as object)) {
-        // Mapeamento condicional: { condicional: { campo, contem, entao, senao } }
-        const cond = (valorMapeamento as { condicional: { campo: string; contem: string; entao: string | null; senao: string | null } }).condicional;
+        // Mapeamento condicional: { condicional: { campo, contem|contemAlgum, entao, senao } }
+        const cond = (valorMapeamento as { condicional: { campo: string; contem?: string; contemAlgum?: string[]; entao: string | null; senao: string | null } }).condicional;
         const campoCondNorm = normStr(cond.campo).replace(/[_\s]/g, "");
         const valorCampoCond = camposIntermedios[campoCondNorm] ?? "";
-        const condicaoAtendida = normStr(valorCampoCond).includes(normStr(cond.contem));
+        let condicaoAtendida: boolean;
+        if (cond.contemAlgum && Array.isArray(cond.contemAlgum)) {
+          condicaoAtendida = cond.contemAlgum.some((s) => normStr(valorCampoCond).includes(normStr(s)));
+        } else {
+          condicaoAtendida = normStr(valorCampoCond).includes(normStr(cond.contem ?? ""));
+        }
         const refEscolhida = condicaoAtendida ? cond.entao : cond.senao;
 
         if (refEscolhida === null || refEscolhida === undefined) {

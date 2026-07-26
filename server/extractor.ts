@@ -85,7 +85,8 @@ export interface ResultadoTriagem {
 
 /** Normaliza string para comparação: minúsculas, sem acentos. */
 function normStr(s: string): string {
-  return s
+  const str = typeof s === "string" ? s : Buffer.isBuffer(s) ? (s as Buffer).toString("utf8") : String(s);
+  return str
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -582,8 +583,14 @@ export async function processarItemTriagemComTexto(
   textoExtraido: string
 ): Promise<CamposExtraidos | null> {
   try {
+    // Garantir que textoExtraido é string (MySQL pode retornar Buffer para TEXT longo)
+    const textoStr = typeof textoExtraido === "string"
+      ? textoExtraido
+      : Buffer.isBuffer(textoExtraido)
+        ? (textoExtraido as unknown as Buffer).toString("utf8")
+        : String(textoExtraido);
     const campos = await extrairCamposDeDocumentoIdentificadoComTexto(
-      item.nomeArquivo, textoExtraido, item.docConfig
+      item.nomeArquivo, textoStr, item.docConfig
     );
     return await _finalizarExtracaoItem(item, devedorId, loteId, campos);
   } catch (err) {

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -8,13 +8,7 @@ import {
   ArrowLeft, Upload, FileSpreadsheet, Trash2, Loader2,
   Calculator, ChevronDown, ChevronRight,
 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -190,69 +184,133 @@ function CategoriaBlock({
 }
 
 // ── Formulário de upload ─────────────────────────────────────────────────────
+// ── Parsing do nome do arquivo ───────────────────────────────────────────────
+// Formato esperado: "<Categoria> <N>" onde N é um número inteiro (ex: "Geral IPCA 3")
+function parseNomeArquivo(nome: string): { categoria: string; qtd: number } | null {
+  const semExt = nome.replace(/\.xlsx$/i, "").trim();
+  // Extrai o número no final
+  const match = semExt.match(/^(.+?)\s+(\d+)$/);
+  if (!match) return null;
+  const categoriaCandidata = match[1].trim();
+  const qtd = parseInt(match[2], 10);
+  if (isNaN(qtd) || qtd < 1 || qtd > 20) return null;
+  // Verifica se a categoria é válida (case-insensitive)
+  const found = CATEGORIAS.find(
+    (c) => c.toLowerCase() === categoriaCandidata.toLowerCase()
+  );
+  if (!found) return null;
+  return { categoria: found, qtd };
+}
+
+type FileItem = {
+  file: File;
+  parsed: { categoria: string; qtd: number } | null;
+  status: "pending" | "uploading" | "done" | "error";
+  error?: string;
+};
+
+function fileToBase64(file: File): Promise<string> {
+  return file.arrayBuffer().then((buf) => {
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  });
+}
+
 function UploadForm({ onUploaded }: { onUploaded: () => void }) {
-  const [categoria, setCategoria] = useState<string>("");
-  const [qtdContratos, setQtdContratos] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
+  const [items, setItems] = useState<FileItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const uploadMut = trpc.modelosCalculo.upload.useMutation({
-    onSuccess: () => {
-      toast.success(`Planilha de ${qtdContratos} contrato(s) para "${categoria}" salva com sucesso.`);
-      setCategoria("");
-      setQtdContratos("");
-      setFile(null);
-      if (fileRef.current) fileRef.current.value = "";
-      onUploaded();
-    },
-    onError: (e) => toast.error("Erro no upload: " + e.message),
-    onSettled: () => setUploading(false),
-  });
+  const uploadMut = trpc.modelosCalculo.upload.useMutation();
 
-  const handleFile = (f: File) => {
-    if (!f.name.toLowerCase().endsWith(".xlsx")) {
-      toast.error("Apenas arquivos .xlsx são aceitos.");
-      return;
-    }
-    setFile(f);
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const arr = Array.from(files);
+    const novos: FileItem[] = arr
+      .filter((f) => f.name.toLowerCase().endsWith(".xlsx"))
+      .map((f) => ({
+        file: f,
+        parsed: parseNomeArquivo(f.name),
+        status: "pending" as const,
+      }));
+    const ignorados = arr.length - novos.length;
+    if (ignorados > 0) toast.warning(`${ignorados} arquivo(s) ignorado(s) — apenas .xlsx é aceito.`);
+    setItems((prev) => {
+      // Evita duplicatas pelo nome
+      const existentes = new Set(prev.map((i) => i.file.name));
+      return [...prev, ...novos.filter((n) => !existentes.has(n.file.name))];
+    });
+  }, []);
+
+  const removeItem = (idx: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleSubmit = async () => {
-    if (!categoria || !qtdContratos || !file) return;
-    const qtd = parseInt(qtdContratos, 10);
-    if (isNaN(qtd) || qtd < 1 || qtd > 20) {
-      toast.error("Quantidade de contratos deve ser entre 1 e 20.");
-      return;
-    }
+    const validos = items.filter((i) => i.parsed && i.status === "pending");
+    if (validos.length === 0) return;
     setUploading(true);
-    const arrayBuffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-    uploadMut.mutate({
-      categoriaPlanilha: categoria,
-      qtdContratos: qtd,
-      nomeArquivo: file.name,
-      tamanho: file.size,
-      fileBase64: base64,
-    });
+    let sucesso = 0;
+    let falha = 0;
+    for (const item of validos) {
+      setItems((prev) =>
+        prev.map((i) => i.file.name === item.file.name ? { ...i, status: "uploading" } : i)
+      );
+      try {
+        const base64 = await fileToBase64(item.file);
+        await uploadMut.mutateAsync({
+          categoriaPlanilha: item.parsed!.categoria,
+          qtdContratos: item.parsed!.qtd,
+          nomeArquivo: item.file.name,
+          tamanho: item.file.size,
+          fileBase64: base64,
+        });
+        setItems((prev) =>
+          prev.map((i) => i.file.name === item.file.name ? { ...i, status: "done" } : i)
+        );
+        sucesso++;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erro desconhecido";
+        setItems((prev) =>
+          prev.map((i) => i.file.name === item.file.name ? { ...i, status: "error", error: msg } : i)
+        );
+        falha++;
+      }
+    }
+    setUploading(false);
+    if (sucesso > 0) {
+      toast.success(`${sucesso} planilha(s) enviada(s) com sucesso.`);
+      onUploaded();
+    }
+    if (falha > 0) toast.error(`${falha} planilha(s) falharam.`);
+    // Remove as concluídas após 2s
+    setTimeout(() => {
+      setItems((prev) => prev.filter((i) => i.status !== "done"));
+    }, 2000);
   };
 
-  const canSubmit = categoria.length > 0 && qtdContratos.length > 0 && file !== null && !uploading;
+  const validosPendentes = items.filter((i) => i.parsed && i.status === "pending");
+  const invalidos = items.filter((i) => !i.parsed && i.status === "pending");
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
       <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
         <Upload className="w-4 h-4 text-green-600" />
-        Adicionar / Substituir Planilha de Cálculo
+        Adicionar / Substituir Planilhas de Cálculo
       </h2>
+      <p className="text-xs text-gray-500">
+        Arraste uma ou várias planilhas de uma vez. O nome do arquivo deve seguir o padrão{" "}
+        <code className="bg-gray-100 px-1 rounded font-mono">Categoria N.xlsx</code>{" "}
+        — ex: <code className="bg-gray-100 px-1 rounded font-mono">Geral IPCA 3.xlsx</code>,{" "}
+        <code className="bg-gray-100 px-1 rounded font-mono">Emprestimo com CE e Cartao 8.xlsx</code>.
+        Se já existir para a mesma combinação, o arquivo será substituído.
+      </p>
 
       {/* Drop zone */}
       <div
-        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
           dragOver ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
         }`}
         onClick={() => fileRef.current?.click()}
@@ -261,69 +319,107 @@ function UploadForm({ onUploaded }: { onUploaded: () => void }) {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          const f = e.dataTransfer.files[0];
-          if (f) handleFile(f);
+          addFiles(e.dataTransfer.files);
         }}
       >
         <input
           ref={fileRef}
           type="file"
           accept=".xlsx"
+          multiple
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          onChange={(e) => { if (e.target.files) addFiles(e.target.files); }}
         />
-        {file ? (
-          <div className="flex items-center justify-center gap-2 text-sm text-green-700">
-            <FileSpreadsheet className="w-5 h-5" />
-            <span className="font-medium">{file.name}</span>
-            <span className="text-gray-400">({formatBytes(file.size)})</span>
-          </div>
-        ) : (
-          <div className="text-gray-400 space-y-1">
-            <FileSpreadsheet className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">Clique ou arraste o arquivo <strong>.xlsx</strong> aqui</p>
-          </div>
-        )}
+        <FileSpreadsheet className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+        <p className="text-sm text-gray-400">
+          Clique ou arraste <strong>uma ou várias planilhas .xlsx</strong> aqui
+        </p>
       </div>
 
-      {/* Categoria e quantidade */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-600">Categoria <span className="text-red-500">*</span></label>
-          <Select value={categoria} onValueChange={setCategoria}>
-            <SelectTrigger className="h-9 text-sm">
-              <SelectValue placeholder="Selecione a categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIAS.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Lista de arquivos */}
+      {items.length > 0 && (
+        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+          {items.map((item, idx) => (
+            <div
+              key={item.file.name}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border ${
+                item.status === "done" ? "bg-green-50 border-green-200" :
+                item.status === "error" ? "bg-red-50 border-red-200" :
+                item.status === "uploading" ? "bg-blue-50 border-blue-200" :
+                !item.parsed ? "bg-amber-50 border-amber-200" :
+                "bg-gray-50 border-gray-200"
+              }`}
+            >
+              {item.status === "done" ? (
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+              ) : item.status === "error" ? (
+                <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+              ) : item.status === "uploading" ? (
+                <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />
+              ) : !item.parsed ? (
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+              ) : (
+                <FileSpreadsheet className="w-4 h-4 text-green-600 shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <span className="font-medium truncate block">{item.file.name}</span>
+                {item.parsed ? (
+                  <span className="text-xs text-gray-500">
+                    {item.parsed.categoria} · {item.parsed.qtd} contrato{item.parsed.qtd !== 1 ? "s" : ""}
+                  </span>
+                ) : (
+                  <span className="text-xs text-amber-600">
+                    Nome não reconhecido — verifique o padrão "Categoria N"
+                  </span>
+                )}
+                {item.error && <span className="text-xs text-red-500 block">{item.error}</span>}
+              </div>
+              <span className="text-xs text-gray-400 shrink-0">{formatBytes(item.file.size)}</span>
+              {item.status === "pending" && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeItem(idx); }}
+                  className="text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          ))}
         </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-600">Nº de contratos <span className="text-red-500">*</span></label>
-          <Select value={qtdContratos} onValueChange={setQtdContratos}>
-            <SelectTrigger className="h-9 text-sm">
-              <SelectValue placeholder="Quantidade" />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
-                <SelectItem key={n} value={String(n)}>{n} contrato{n !== 1 ? "s" : ""}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-gray-400">Se já existir para essa combinação, o arquivo será substituído.</p>
-        </div>
-      </div>
+      )}
 
-      <Button onClick={handleSubmit} disabled={!canSubmit} className="w-full bg-green-600 hover:bg-green-700">
-        {uploading ? (
-          <><Loader2 className="w-4 h-4 animate-spin mr-2" />Enviando...</>
-        ) : (
-          <><Upload className="w-4 h-4 mr-2" />Enviar Planilha</>
+      {invalidos.length > 0 && (
+        <p className="text-xs text-amber-600 flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5" />
+          {invalidos.length} arquivo(s) com nome não reconhecido serão ignorados no envio.
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        {items.length > 0 && !uploading && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setItems([])}
+            className="text-gray-500"
+          >
+            Limpar lista
+          </Button>
         )}
-      </Button>
+        <Button
+          onClick={handleSubmit}
+          disabled={validosPendentes.length === 0 || uploading}
+          className="flex-1 bg-green-600 hover:bg-green-700"
+        >
+          {uploading ? (
+            <><Loader2 className="w-4 h-4 animate-spin mr-2" />Enviando...</>
+          ) : (
+            <><Upload className="w-4 h-4 mr-2" />
+              Enviar {validosPendentes.length > 0 ? `${validosPendentes.length} planilha${validosPendentes.length !== 1 ? "s" : ""}` : "Planilhas"}
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -410,3 +506,4 @@ export default function ModelosCalculoPage() {
     </div>
   );
 }
+

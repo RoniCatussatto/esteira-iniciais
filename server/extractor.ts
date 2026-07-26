@@ -45,6 +45,7 @@ interface ConfigJson {
   regrasIdentificacao?: RegrasIdentificacao;
   camposExtracao?: CampoExtracao[];
   mapeamentoCampos?: MapeamentoCampos;
+  prioridade?: number; // 0 = alta prioridade (Fatura), 1 = normal (Extrato), etc.
 }
 
 interface DocConfigComRegras {
@@ -53,6 +54,7 @@ interface DocConfigComRegras {
   regrasIdentificacao: RegrasIdentificacao | null;
   camposExtracao: CampoExtracao[];
   mapeamentoCampos: MapeamentoCampos | null;
+  prioridade?: number;
 }
 
 export interface CamposExtraidos {
@@ -65,6 +67,7 @@ export interface CamposExtraidos {
   docConfigId?: number;
   nomeDocumento?: string;
   numeroContratoIdentificado?: string | null; // contrato identificado no nome do arquivo
+  prioridade?: number; // quanto menor, maior a prioridade (0 = Fatura, 1 = Extrato, etc.)
 }
 
 /** Item do resultado da triagem: um documento e a regra que o identificou */
@@ -277,6 +280,7 @@ async function buscarDocConfigsDoCliente(cooperativa: string): Promise<DocConfig
       let regrasId: RegrasIdentificacao | null = null;
       let camposExt: CampoExtracao[] = [];
       let mapeamento: MapeamentoCampos | null = null;
+      let prioridade: number | undefined = undefined;
 
       if (c.configJson) {
         try {
@@ -284,6 +288,7 @@ async function buscarDocConfigsDoCliente(cooperativa: string): Promise<DocConfig
           regrasId = cfg.regrasIdentificacao ?? null;
           camposExt = cfg.camposExtracao ?? [];
           mapeamento = cfg.mapeamentoCampos ?? null;
+          prioridade = cfg.prioridade;
         } catch { /* ignorar */ }
       }
       if (!regrasId && c.regrasIdentificacao) {
@@ -296,6 +301,7 @@ async function buscarDocConfigsDoCliente(cooperativa: string): Promise<DocConfig
         regrasIdentificacao: regrasId,
         camposExtracao: camposExt,
         mapeamentoCampos: mapeamento,
+        prioridade,
       };
     })
     .filter((c) => c.regrasIdentificacao !== null);
@@ -421,6 +427,9 @@ function _extrairCamposComTexto(
   docConfig: DocConfigComRegras,
   resultado: CamposExtraidos
 ): CamposExtraidos {
+  // Propagar prioridade da configuração para o resultado
+  if (docConfig.prioridade !== undefined) resultado.prioridade = docConfig.prioridade;
+
   // Verificação adicional por conteúdo (se configurada)
   const regras = docConfig.regrasIdentificacao;
   if (regras?.palavrasChaveConteudo && regras.palavrasChaveConteudo.length > 0) {
@@ -625,7 +634,9 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
       console.log(`[Extractor] Contrato "${contratoAlvo}" não encontrado — inserido novo registro`);
     } else {
       for (const ext of extParaAtualizar) {
-        // Montar updateData respeitando campos já preenchidos: só sobrescreve se o campo atual for nulo/vazio
+        // Alta prioridade (ex: Fatura, prioridade=0): sempre sobrescreve dp01/dp02
+        // Prioridade normal (ex: Extrato, prioridade=1 ou undefined): só preenche campos vazios
+        const altaPrioridade = (campos.prioridade ?? 1) === 0;
         const updateDataPorExt: Record<string, unknown> = {};
         const dp01Atual = ext.dadoPlanilha01;
         const dp02Atual = ext.dadoPlanilha02;
@@ -633,10 +644,10 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
         const dp04Atual = ext.dadoPlanilha04;
         console.log(`[Extractor] Contrato ${ext.numeroContrato}: dp01="${dp01Atual}" dp02="${dp02Atual}" dp03="${dp03Atual}" dp04="${dp04Atual}"`);
         console.log(`[Extractor] Novos valores: dp01="${campos.dadoPlanilha01}" dp02="${campos.dadoPlanilha02}" dp03="${campos.dadoPlanilha03}" dp04="${campos.dadoPlanilha04}"`);
-        if (campos.dadoPlanilha01 !== undefined && (dp01Atual === null || dp01Atual === undefined || dp01Atual === '')) updateDataPorExt.dadoPlanilha01 = campos.dadoPlanilha01;
-        if (campos.dadoPlanilha02 !== undefined && (dp02Atual === null || dp02Atual === undefined || dp02Atual === '')) updateDataPorExt.dadoPlanilha02 = campos.dadoPlanilha02;
-        if (campos.dadoPlanilha03 !== undefined && (dp03Atual === null || dp03Atual === undefined || dp03Atual === '')) updateDataPorExt.dadoPlanilha03 = campos.dadoPlanilha03;
-        if (campos.dadoPlanilha04 !== undefined && (dp04Atual === null || dp04Atual === undefined || dp04Atual === '')) updateDataPorExt.dadoPlanilha04 = campos.dadoPlanilha04;
+        if (campos.dadoPlanilha01 !== undefined && (altaPrioridade || !dp01Atual)) updateDataPorExt.dadoPlanilha01 = campos.dadoPlanilha01;
+        if (campos.dadoPlanilha02 !== undefined && (altaPrioridade || !dp02Atual)) updateDataPorExt.dadoPlanilha02 = campos.dadoPlanilha02;
+        if (campos.dadoPlanilha03 !== undefined && (altaPrioridade || !dp03Atual)) updateDataPorExt.dadoPlanilha03 = campos.dadoPlanilha03;
+        if (campos.dadoPlanilha04 !== undefined && (altaPrioridade || !dp04Atual)) updateDataPorExt.dadoPlanilha04 = campos.dadoPlanilha04;
         console.log(`[Extractor] updateData para ${ext.numeroContrato}:`, JSON.stringify(updateDataPorExt));
         // multa2pct e moraEspecifica: sobrescreve apenas se ainda "branco"/nulo
         if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco")) updateDataPorExt.multa2pct = campos.multa2pct;

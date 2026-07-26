@@ -10,6 +10,8 @@ import {
   ArrowLeft, Send, Upload, FileText, X, Loader2,
   CheckCircle, Bot, User, Paperclip, Trash2, Save,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Link } from "wouter";
 
 type ChatMessage = {
@@ -22,6 +24,21 @@ type ArquivoModelo = {
   url: string;
   key: string;
   mimeType?: string;
+};
+
+type CampoExtracao = {
+  campo: "dadoPlanilha01" | "dadoPlanilha02" | "dadoPlanilha03" | "dadoPlanilha04" | "moraEspecifica";
+  descricao: string;
+  localizacao: string;
+  dica: string;
+};
+
+type FormularioConfig = {
+  identificacaoPalavras: string;
+  contratoNoNome: "sim" | "nao" | "";
+  camposExtracao: CampoExtracao[];
+  multa2pct: "sim" | "nao" | "extrair" | "";
+  moraFonte: "extrair" | "outro" | "";
 };
 
 export default function DocConfigPage() {
@@ -58,6 +75,68 @@ export default function DocConfigPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Formulário guiado
+  const [mostrarFormulario, setMostrarFormulario] = useState(true);
+  const [formulario, setFormulario] = useState<FormularioConfig>({
+    identificacaoPalavras: "",
+    contratoNoNome: "",
+    camposExtracao: [{ campo: "dadoPlanilha01", descricao: "", localizacao: "", dica: "" }],
+    multa2pct: "",
+    moraFonte: "",
+  });
+
+  // Gerar prompt estruturado a partir do formulário
+  const gerarPromptDoFormulario = () => {
+    const f = formulario;
+    const camposTexto = f.camposExtracao
+      .filter(c => c.descricao.trim())
+      .map(c => {
+        let linha = `- **${c.campo}** = ${c.descricao.trim()}`;
+        if (c.localizacao.trim()) linha += ` (localização: ${c.localizacao.trim()})`;
+        if (c.dica.trim()) linha += ` — dica: ${c.dica.trim()}`;
+        return linha;
+      })
+      .join("\n");
+
+    const multaTexto =
+      f.multa2pct === "sim" ? "Multa 2%: SEMPRE SIM para este tipo de documento." :
+      f.multa2pct === "nao" ? "Multa 2%: SEMPRE NÃO para este tipo de documento." :
+      f.multa2pct === "extrair" ? "Multa 2%: extrair do conteúdo do documento." :
+      "";
+
+    const moraTexto =
+      f.moraFonte === "extrair" ? "Mora Específica: extrair deste documento." :
+      f.moraFonte === "outro" ? "Mora Específica: será extraída de outro documento, não configurar aqui." :
+      "";
+
+    const contratoTexto = f.contratoNoNome === "sim"
+      ? "O número do contrato aparece no nome do arquivo (ex: FATURA - 330525.pdf → contrato 330525). O sistema já detecta automaticamente. Coloque o número do contrato também no Dado Planilha 02 usando o número extraído do nome do arquivo."
+      : f.contratoNoNome === "nao"
+      ? "O número do contrato NÃO aparece no nome do arquivo."
+      : "";
+
+    return [
+      `Quero configurar a extração do documento **${nomeDocumento || "este documento"}**.`,
+      "",
+      `**Identificação:** o arquivo tem "${f.identificacaoPalavras}" no título.`,
+      "",
+      contratoTexto ? `**Vinculação ao contrato:** ${contratoTexto}` : "",
+      "",
+      camposTexto ? `**Dados a extrair:**\n${camposTexto}` : "",
+      "",
+      multaTexto,
+      moraTexto,
+      "",
+      "Gere a configuração JSON completa.",
+    ].filter(l => l !== "").join("\n").trim();
+  };
+
+  const enviarFormulario = () => {
+    const prompt = gerarPromptDoFormulario();
+    setInputText(prompt);
+    setMostrarFormulario(false);
+  };
 
   // Inicializar com dados existentes
   useEffect(() => {
@@ -342,22 +421,219 @@ export default function DocConfigPage() {
 
       <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-6 flex flex-col gap-4" style={{ minHeight: 0 }}>
         {/* Nome do documento (apenas para novo) */}
-        {isNew && !currentDocConfigId && (
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nome do tipo de documento <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={nomeDocumento}
-              onChange={e => setNomeDocumento(e.target.value)}
-              placeholder="Ex: CCB, CCBE, Fatura, Extrato Sisbr, Ficha Gráfica..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Este nome será usado para identificar o tipo de documento no sistema.
-            </p>
+        {/* Formulário guiado */}
+        {isNew && mostrarFormulario && (
+          <div className="bg-white rounded-lg border border-blue-200 shadow-sm">
+            <div className="px-5 py-4 border-b border-blue-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-blue-900">Assistente de configuração guiada</h2>
+                <p className="text-xs text-blue-600 mt-0.5">Preencha os campos abaixo para gerar automaticamente as instruções para a IA</p>
+              </div>
+              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600" onClick={() => setMostrarFormulario(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* Nome do documento */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome do tipo de documento <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={nomeDocumento}
+                  onChange={e => setNomeDocumento(e.target.value)}
+                  placeholder="Ex: Fatura, CCB, Extrato Sisbr..."
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <Separator />
+
+              {/* Identificação */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Palavras-chave no nome do arquivo para identificar este documento
+                </label>
+                <input
+                  type="text"
+                  value={formulario.identificacaoPalavras}
+                  onChange={e => setFormulario(f => ({ ...f, identificacaoPalavras: e.target.value }))}
+                  placeholder="Ex: FATURA (o arquivo contém esta palavra no título)"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">O sistema identifica o documento quando o nome do arquivo <strong>contém</strong> esta palavra (não precisa ser o título completo).</p>
+              </div>
+
+              {/* Contrato no nome */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  O número do contrato aparece no nome do arquivo?
+                </label>
+                <Select
+                  value={formulario.contratoNoNome}
+                  onValueChange={v => setFormulario(f => ({ ...f, contratoNoNome: v as "sim" | "nao" | "" }))}
+                >
+                  <SelectTrigger className="w-full text-sm">
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sim">Sim — ex: "FATURA - 330525.pdf" → contrato 330525</SelectItem>
+                    <SelectItem value="nao">Não — o contrato está dentro do documento ou não se aplica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+
+              {/* Campos de extração */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Dados a extrair do documento</label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => setFormulario(f => ({
+                      ...f,
+                      camposExtracao: [...f.camposExtracao, { campo: "dadoPlanilha02", descricao: "", localizacao: "", dica: "" }]
+                    }))}
+                  >
+                    + Adicionar campo
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  {formulario.camposExtracao.map((campo, idx) => (
+                    <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={campo.campo}
+                          onValueChange={v => setFormulario(f => {
+                            const updated = [...f.camposExtracao];
+                            updated[idx] = { ...updated[idx], campo: v as CampoExtracao["campo"] };
+                            return { ...f, camposExtracao: updated };
+                          })}
+                        >
+                          <SelectTrigger className="w-44 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dadoPlanilha01">Dado Planilha 01</SelectItem>
+                            <SelectItem value="dadoPlanilha02">Dado Planilha 02</SelectItem>
+                            <SelectItem value="dadoPlanilha03">Dado Planilha 03</SelectItem>
+                            <SelectItem value="dadoPlanilha04">Dado Planilha 04</SelectItem>
+                            <SelectItem value="moraEspecifica">Mora Específica</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {formulario.camposExtracao.length > 1 && (
+                          <button
+                            onClick={() => setFormulario(f => ({ ...f, camposExtracao: f.camposExtracao.filter((_, i) => i !== idx) }))}
+                            className="text-red-400 hover:text-red-600 ml-auto"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={campo.descricao}
+                        onChange={e => setFormulario(f => {
+                          const updated = [...f.camposExtracao];
+                          updated[idx] = { ...updated[idx], descricao: e.target.value };
+                          return { ...f, camposExtracao: updated };
+                        })}
+                        placeholder="O que é este dado? Ex: número da conta cartão"
+                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={campo.localizacao}
+                        onChange={e => setFormulario(f => {
+                          const updated = [...f.camposExtracao];
+                          updated[idx] = { ...updated[idx], localizacao: e.target.value };
+                          return { ...f, camposExtracao: updated };
+                        })}
+                        placeholder="Onde aparece? Ex: corpo do documento, cabeçalho, nome do arquivo após o hífen"
+                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={campo.dica}
+                        onChange={e => setFormulario(f => {
+                          const updated = [...f.camposExtracao];
+                          updated[idx] = { ...updated[idx], dica: e.target.value };
+                          return { ...f, camposExtracao: updated };
+                        })}
+                        placeholder="Dica para encontrar (opcional): Ex: 13 dígitos, começa com 75644"
+                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Multa e mora */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Multa 2%</label>
+                  <Select
+                    value={formulario.multa2pct}
+                    onValueChange={v => setFormulario(f => ({ ...f, multa2pct: v as FormularioConfig["multa2pct"] }))}
+                  >
+                    <SelectTrigger className="text-sm">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sim">Sempre SIM para este documento</SelectItem>
+                      <SelectItem value="nao">Sempre NÃO para este documento</SelectItem>
+                      <SelectItem value="extrair">Extrair do conteúdo do documento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Mora Específica</label>
+                  <Select
+                    value={formulario.moraFonte}
+                    onValueChange={v => setFormulario(f => ({ ...f, moraFonte: v as FormularioConfig["moraFonte"] }))}
+                  >
+                    <SelectTrigger className="text-sm">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="extrair">Extrair deste documento</SelectItem>
+                      <SelectItem value="outro">Extrair de outro documento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={() => setMostrarFormulario(false)}>
+                  Pular e usar chat livre
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={enviarFormulario}
+                  disabled={!nomeDocumento.trim() || !formulario.identificacaoPalavras.trim()}
+                  className="gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Gerar configuração com IA
+                </Button>
+              </div>
+            </div>
           </div>
+        )}
+        {/* Botão para reabrir formulário guiado */}
+        {isNew && !mostrarFormulario && messages.length <= 1 && (
+          <button
+            onClick={() => setMostrarFormulario(true)}
+            className="text-xs text-blue-600 hover:underline text-left"
+          >
+            ← Voltar ao formulário guiado
+          </button>
         )}
 
         {/* Arquivos modelo */}

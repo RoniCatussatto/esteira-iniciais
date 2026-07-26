@@ -325,6 +325,27 @@ export async function triarDocumentos(
 
 // ─── Extração de campos ───────────────────────────────────────────────────────
 
+/** Atribui um valor extraído ao campo correto do resultado. */
+function atribuirCampo(resultado: CamposExtraidos, campoNorm: string, valorFinal: string): void {
+  if (campoNorm === "dadoplanilha01" || campoNorm === "dado01") {
+    resultado.dadoPlanilha01 = valorFinal;
+  } else if (campoNorm === "dadoplanilha02" || campoNorm === "dado02") {
+    resultado.dadoPlanilha02 = valorFinal;
+  } else if (campoNorm === "dadoplanilha03" || campoNorm === "dado03") {
+    resultado.dadoPlanilha03 = valorFinal;
+  } else if (campoNorm === "dadoplanilha04" || campoNorm === "dado04") {
+    resultado.dadoPlanilha04 = valorFinal;
+  } else if (campoNorm === "multa2pct" || campoNorm === "multa2%" || campoNorm === "multa") {
+    const vNorm = normStr(valorFinal);
+    resultado.multa2pct =
+      vNorm.includes("sim") || vNorm === "1" || vNorm === "true" ? "sim" :
+      vNorm.includes("nao") || vNorm.includes("não") || vNorm === "0" ? "nao" :
+      "branco";
+  } else if (campoNorm === "moraespecifica" || campoNorm === "mora") {
+    resultado.moraEspecifica = valorFinal;
+  }
+}
+
 /**
  * Extrai os campos de um documento já identificado na triagem.
  * Recebe o buffer do arquivo e a docConfig associada.
@@ -362,32 +383,49 @@ async function extrairCamposDeDocumentoIdentificado(
     }
   }
 
-  // Aplicar regras de extração
+  // Aplicar regras de extração dos camposExtracao
   for (const campo of docConfig.camposExtracao) {
-    if (!campo.regex || !campo.campo) continue;
+    if (!campo.campo) continue;
 
-    const valorExtraido = aplicarRegex(textoPDF, campo.regex);
-    if (!valorExtraido) continue;
+    let valorFinal: string | null = null;
 
-    const valorFinal = aplicarTransformacao(valorExtraido, campo.transformacao);
+    // Verificar se a extração é do nome do arquivo (não do conteúdo do PDF)
+    const locNorm = normStr(campo.localizacao ?? "");
+    const extrairDoNome = locNorm.includes("nome") || locNorm.includes("titulo") || locNorm.includes("arquivo");
+
+    if (campo.regex) {
+      const textoFonte = extrairDoNome ? nomeArquivo : textoPDF;
+      const valorExtraido = aplicarRegex(textoFonte, campo.regex);
+      if (valorExtraido) {
+        valorFinal = aplicarTransformacao(valorExtraido, campo.transformacao);
+      }
+    }
+
+    if (!valorFinal) continue;
+
     const campoNorm = campo.campo.toLowerCase().replace(/[_\s]/g, "");
+    atribuirCampo(resultado, campoNorm, valorFinal);
+  }
 
-    if (campoNorm === "dadoplanilha01" || campoNorm === "dado01") {
-      resultado.dadoPlanilha01 = valorFinal;
-    } else if (campoNorm === "dadoplanilha02" || campoNorm === "dado02") {
-      resultado.dadoPlanilha02 = valorFinal;
-    } else if (campoNorm === "dadoplanilha03" || campoNorm === "dado03") {
-      resultado.dadoPlanilha03 = valorFinal;
-    } else if (campoNorm === "dadoplanilha04" || campoNorm === "dado04") {
-      resultado.dadoPlanilha04 = valorFinal;
-    } else if (campoNorm === "multa2pct" || campoNorm === "multa2%" || campoNorm === "multa") {
-      const vNorm = normStr(valorFinal);
-      resultado.multa2pct =
-        vNorm.includes("sim") || vNorm === "1" || vNorm === "true" ? "sim" :
-        vNorm.includes("nao") || vNorm.includes("não") || vNorm === "0" ? "nao" :
-        "branco";
-    } else if (campoNorm === "moraespecifica" || campoNorm === "mora") {
-      resultado.moraEspecifica = valorFinal;
+  // Aplicar valores fixos do mapeamentoCampos (ex: multa2pct: "nao")
+  if (docConfig.mapeamentoCampos) {
+    const mp = docConfig.mapeamentoCampos;
+    // multa2pct: se o valor for "sim", "nao" ou "branco" diretamente (valor fixo)
+    if (mp.multa2pct && resultado.multa2pct === undefined) {
+      const vNorm = normStr(mp.multa2pct);
+      if (vNorm === "sim" || vNorm === "nao" || vNorm === "branco") {
+        resultado.multa2pct = vNorm as "sim" | "nao" | "branco";
+        console.log(`[Extractor] multa2pct fixo: "${vNorm}"`);
+      }
+    }
+    // moraEspecifica: se o valor for um número ou texto fixo (não uma descrição de campo)
+    if (mp.moraEspecifica && resultado.moraEspecifica === undefined) {
+      const vNorm = mp.moraEspecifica.trim();
+      // Só aplicar se parecer um valor numérico (taxa) e não uma descrição
+      if (/^[\d.,]+%?$/.test(vNorm)) {
+        resultado.moraEspecifica = vNorm;
+        console.log(`[Extractor] moraEspecifica fixa: "${vNorm}"`);
+      }
     }
   }
 
@@ -505,6 +543,26 @@ export async function processarItemTriagem(
     // Propagar o contrato identificado na triagem para a gravação
     campos.numeroContratoIdentificado = item.numeroContratoNoNome ?? null;
     console.log(`[Extractor] Contrato alvo para gravação: ${campos.numeroContratoIdentificado ?? "(todos)"}`);
+
+    // Se dadoPlanilha02 não foi extraído mas há um campo marcado como identificaContrato,
+    // usar o número do contrato do nome do arquivo como fallback
+    const campoContrato = item.docConfig.camposExtracao.find((c) => c.identificaContrato);
+    if (campoContrato && campos.numeroContratoIdentificado) {
+      const campoNorm = campoContrato.campo.toLowerCase().replace(/[_\s]/g, "");
+      if (campoNorm === "dadoplanilha01" && !campos.dadoPlanilha01) {
+        campos.dadoPlanilha01 = campos.numeroContratoIdentificado;
+        console.log(`[Extractor] dadoPlanilha01 preenchido com número do contrato (fallback): ${campos.dadoPlanilha01}`);
+      } else if (campoNorm === "dadoplanilha02" && !campos.dadoPlanilha02) {
+        campos.dadoPlanilha02 = campos.numeroContratoIdentificado;
+        console.log(`[Extractor] dadoPlanilha02 preenchido com número do contrato (fallback): ${campos.dadoPlanilha02}`);
+      } else if (campoNorm === "dadoplanilha03" && !campos.dadoPlanilha03) {
+        campos.dadoPlanilha03 = campos.numeroContratoIdentificado;
+        console.log(`[Extractor] dadoPlanilha03 preenchido com número do contrato (fallback): ${campos.dadoPlanilha03}`);
+      } else if (campoNorm === "dadoplanilha04" && !campos.dadoPlanilha04) {
+        campos.dadoPlanilha04 = campos.numeroContratoIdentificado;
+        console.log(`[Extractor] dadoPlanilha04 preenchido com número do contrato (fallback): ${campos.dadoPlanilha04}`);
+      }
+    }
 
     // Gravar no banco
     await gravarExtracoes(devedorId, loteId, campos);

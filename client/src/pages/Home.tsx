@@ -10,6 +10,7 @@ import {
   ChevronRight, Loader2, ChevronLeft, Trash2, AlertTriangle,
 } from "lucide-react";
 import { Building2 } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { Link } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -123,6 +124,12 @@ export default function Home() {
             <p className="text-sm text-gray-500">Sistema de Elaboração de Planilhas e Petições Iniciais</p>
           </div>
           <div className="ml-auto">
+            <Link href="/indices">
+              <Button variant="outline" size="sm" className="gap-1.5 mr-2">
+                <TrendingUp className="w-4 h-4" />
+                Índices
+              </Button>
+            </Link>
             <Link href="/configuracoes">
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Building2 className="w-4 h-4" />

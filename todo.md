@@ -91,3 +91,10 @@
 - [x] Corrigir toast "undefined arquivo(s)" no upload individual
 - [ ] Testar extração com documentos reais configurados
 - [ ] Adicionar feedback visual na RevisaoPage mostrando qual documento foi identificado
+
+## Módulo Índices de Correção
+- [x] Criar tabela `indicesCorrecao` no banco (mesAno, dataTexto, ipca, selic)
+- [x] Seed com 79 registros históricos (jan/2020 a jul/2026) do JSON fornecido
+- [x] Procedures tRPC: list, ultimoIndice, upsert, update, delete
+- [x] Página /indices com tabela, filtro por ano, cards de resumo e edição inline
+- [x] Link "Índices" no header da Home ao lado de Configurações

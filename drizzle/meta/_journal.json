@@ -57,6 +57,13 @@
       "when": 1785030936534,
       "tag": "0007_mysterious_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1785080890072,
+      "tag": "0008_bitter_tomorrow_man",
+      "breakpoints": true
     }
   ]
 }

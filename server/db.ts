@@ -1,6 +1,6 @@
 import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig, indicesCorrecao, InsertIndiceCorrecao } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -334,4 +334,39 @@ export async function deleteDocConfig(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(docConfigs).where(eq(docConfigs.id, id));
+}
+
+// ─── Índices de Correção ───────────────────────────────────────────────────
+
+export async function getIndicesCorrecao() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(indicesCorrecao).orderBy(indicesCorrecao.mesAno);
+}
+
+export async function getUltimoIndice() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(indicesCorrecao).orderBy(indicesCorrecao.mesAno).limit(1000);
+  return rows.length > 0 ? rows[rows.length - 1] : null;
+}
+
+export async function upsertIndiceCorrecao(data: InsertIndiceCorrecao) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(indicesCorrecao).values(data).onDuplicateKeyUpdate({
+    set: { dataTexto: data.dataTexto, ipca: data.ipca, selic: data.selic },
+  });
+}
+
+export async function updateIndiceCorrecao(id: number, data: Partial<InsertIndiceCorrecao>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(indicesCorrecao).set(data).where(eq(indicesCorrecao.id, id));
+}
+
+export async function deleteIndiceCorrecao(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(indicesCorrecao).where(eq(indicesCorrecao.id, id));
 }

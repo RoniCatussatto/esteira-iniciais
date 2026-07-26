@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { decimal, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -185,3 +185,24 @@ export const docConfigs = mysqlTable("docConfigs", {
 
 export type DocConfig = typeof docConfigs.$inferSelect;
 export type InsertDocConfig = typeof docConfigs.$inferInsert;
+
+/**
+ * Índices de correção monetária mensais (IPCA e Selic acumulada).
+ * Cada registro representa um mês/ano com seus respectivos valores.
+ */
+export const indicesCorrecao = mysqlTable("indicesCorrecao", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Mês/ano no formato "YYYY-MM" (ex: "2025-07") — chave natural única */
+  mesAno: varchar("mesAno", { length: 7 }).notNull().unique(),
+  /** Rótulo legível (ex: "jul/2025") */
+  dataTexto: varchar("dataTexto", { length: 20 }).notNull(),
+  /** Valor do índice IPCA acumulado */
+  ipca: decimal("ipca", { precision: 12, scale: 6 }).notNull(),
+  /** Valor do índice Selic acumulado */
+  selic: decimal("selic", { precision: 12, scale: 6 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type IndiceCorrecao = typeof indicesCorrecao.$inferSelect;
+export type InsertIndiceCorrecao = typeof indicesCorrecao.$inferInsert;

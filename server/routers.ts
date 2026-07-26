@@ -46,6 +46,13 @@ import {
   updateDocConfig,
   deleteDocConfig,
 } from "./db";
+import {
+  getIndicesCorrecao,
+  getUltimoIndice,
+  upsertIndiceCorrecao,
+  updateIndiceCorrecao,
+  deleteIndiceCorrecao,
+} from "./db";
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -351,6 +358,42 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => deleteDocConfig(input.id)),
+  }),
+
+  indices: router({
+    list: publicProcedure.query(() => getIndicesCorrecao()),
+    ultimoIndice: publicProcedure.query(() => getUltimoIndice()),
+    upsert: publicProcedure
+      .input(z.object({
+        mesAno: z.string().regex(/^\d{4}-\d{2}$/, "Formato deve ser YYYY-MM"),
+        dataTexto: z.string(),
+        ipca: z.number(),
+        selic: z.number(),
+      }))
+      .mutation(({ input }) => upsertIndiceCorrecao({
+        mesAno: input.mesAno,
+        dataTexto: input.dataTexto,
+        ipca: String(input.ipca),
+        selic: String(input.selic),
+      })),
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        ipca: z.number().optional(),
+        selic: z.number().optional(),
+        dataTexto: z.string().optional(),
+      }))
+      .mutation(({ input }) => {
+        const { id, ...data } = input;
+        const updateData: Record<string, string> = {};
+        if (data.ipca !== undefined) updateData.ipca = String(data.ipca);
+        if (data.selic !== undefined) updateData.selic = String(data.selic);
+        if (data.dataTexto !== undefined) updateData.dataTexto = data.dataTexto;
+        return updateIndiceCorrecao(id, updateData);
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteIndiceCorrecao(input.id)),
   }),
 });
 

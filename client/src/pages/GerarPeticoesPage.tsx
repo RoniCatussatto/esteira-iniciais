@@ -79,6 +79,9 @@ function tipoContratoBadgeColor(tipo: string | null) {
 // Placeholders que precisam de textarea maior
 const PLACEHOLDERS_GRANDES = ["PARAGRAFO_INICIAL", "ENDERECO_COOP", "DEVEDOR_ENDERECO_1", "VALOR_CAUSA"];
 
+// Placeholders que NÃO devem ser exibidos na revisão (serão preenchidos manualmente pelo usuário no Word)
+const PLACEHOLDERS_OCULTOS = ["PLANILHA"];
+
 export default function GerarPeticoesPage() {
   const { id } = useParams<{ id: string }>();
   const loteId = parseInt(id ?? "0");
@@ -423,7 +426,7 @@ export default function GerarPeticoesPage() {
                 </CardHeader>
                 <CardContent className="px-5 pb-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {devAtual.placeholders.map((ph) => {
+                    {devAtual.placeholders.filter(ph => !PLACEHOLDERS_OCULTOS.includes(ph)).map((ph) => {
                       const isGrande = PLACEHOLDERS_GRANDES.includes(ph);
                       return (
                         <div key={ph} className={isGrande ? "sm:col-span-2" : ""}>

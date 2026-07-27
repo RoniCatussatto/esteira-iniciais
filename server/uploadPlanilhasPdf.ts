@@ -24,9 +24,9 @@ export const uploadPlanilhasPdfRouter = Router();
 
 /**
  * Extrai o valor do Total Geral de um PDF de planilha de cálculo.
- * Estratégia: o valor do Total Geral aparece DUAS VEZES no PDF (linha "Débito" e linha "Total Geral").
- * Busca o valor monetário que se repete — esse é sempre o Total Geral.
- * Fallback: busca pelo último "Total Geral" e pega o primeiro valor após ele.
+ * Estratégia: o Total Geral é sempre o MAIOR valor monetário da planilha.
+ * Extrai todos os valores R$ do PDF e retorna o maior.
+ * Fallback: busca pelo último "Total Geral" no texto.
  * Retorna o valor em formato BR (ex: "12.148,74") ou null se não encontrar.
  */
 function extrairTotalGeral(pdfBuffer: Buffer): string | null {
@@ -38,22 +38,14 @@ function extrairTotalGeral(pdfBuffer: Buffer): string | null {
     // Extrair todos os valores monetários do texto
     const todosValores = Array.from(text.matchAll(/R\$\s*([\d,\.]+)/g)).map(m => m[1]);
 
-    // Estratégia 1: encontrar o valor que aparece duas vezes (Débito = Total Geral)
-    const contagem = new Map<string, number>();
-    for (const v of todosValores) {
-      const norm = normalizarValorBR(v);
-      contagem.set(norm, (contagem.get(norm) ?? 0) + 1);
-    }
-    // Filtrar valores que aparecem >= 2 vezes, pegar o maior (Total Geral pode ter duplicatas menores)
-    const repetidos = Array.from(contagem.entries())
-      .filter(([, cnt]) => cnt >= 2)
-      .map(([val]) => val);
-
-    if (repetidos.length > 0) {
-      // Converter para número para pegar o maior valor repetido
-      const parseValor = (v: string) => parseFloat(v.replace(/\./g, "").replace(",", "."));
-      repetidos.sort((a, b) => parseValor(b) - parseValor(a));
-      return repetidos[0];
+    if (todosValores.length > 0) {
+      // O Total Geral é sempre o maior valor monetário da planilha
+      const parseValor = (v: string) => {
+        const norm = normalizarValorBR(v);
+        return parseFloat(norm.replace(/\./g, "").replace(",", "."));
+      };
+      const maior = todosValores.reduce((acc, v) => parseValor(v) > parseValor(acc) ? v : acc);
+      return normalizarValorBR(maior);
     }
 
     // Fallback: busca pelo último "Total Geral" e pega o primeiro valor após ele

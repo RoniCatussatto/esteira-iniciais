@@ -133,3 +133,13 @@
 - [x] GerarPeticoesPage: carrossel com dados cliente / devedor / tabela contratos / campos placeholders
 - [x] Rota /lote/:id/gerar-peticoes no App.tsx
 - [x] Botão "Próximo passo" na UploadPlanilhasPdfPage → GerarPeticoesPage
+
+## Autenticação Própria (Email/Senha)
+- [x] Criar tabela `localUsers` no schema (id, email, passwordHash, name, createdAt)
+- [x] Instalar bcryptjs para hash de senha
+- [x] Criar procedures tRPC: auth.localLogin, auth.localMe, auth.localLogout
+- [x] Criar middleware de sessão própria (JWT separado do Manus OAuth)
+- [x] Criar página LoginPage (/login) com email/senha e link "Esqueci minha senha" → Manus OAuth
+- [x] Proteger todas as rotas do frontend com verificação de sessão local
+- [x] Criar script seed-admin.mjs para cadastrar usuário admin via linha de comando
+- [x] Remover dependência do Manus OAuth do fluxo principal (manter apenas como fallback de recuperação)

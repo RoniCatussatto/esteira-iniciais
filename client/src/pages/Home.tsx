@@ -19,11 +19,14 @@ import {
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useRef } from "react";
+import { useLocalAuth } from "@/hooks/useLocalAuth";
+import { LogOut } from "lucide-react";
 
 const PAGE_SIZE = 10;
 
 export default function Home() {
   const [, navigate] = useLocation();
+  const { user, logout } = useLocalAuth();
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [page, setPage] = useState(1);
@@ -125,6 +128,11 @@ export default function Home() {
             <p className="text-sm text-gray-500">Sistema de Elaboração de Planilhas e Petições Iniciais</p>
           </div>
           <div className="ml-auto">
+            {user && (
+              <span className="text-sm text-gray-500 mr-3 hidden sm:inline">
+                {user.name || user.email}
+              </span>
+            )}
             <Link href="/indices">
               <Button variant="outline" size="sm" className="gap-1.5 mr-2">
                 <TrendingUp className="w-4 h-4" />
@@ -149,6 +157,15 @@ export default function Home() {
                 Clientes
               </Button>
             </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 ml-2 text-gray-500 hover:text-red-600"
+              onClick={logout}
+              title="Sair"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>

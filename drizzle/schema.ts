@@ -25,6 +25,22 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+/**
+ * Usuários locais com autenticação própria (email/senha).
+ * Independente do Manus OAuth — permite login direto com email e senha.
+ */
+export const localUsers = mysqlTable("localUsers", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  name: varchar("name", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LocalUser = typeof localUsers.$inferSelect;
+export type InsertLocalUser = typeof localUsers.$inferInsert;
+
 // TODO: Add your tables here
 // TODO: Add your tables here
 

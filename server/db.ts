@@ -1,6 +1,6 @@
 import { eq, lt, count, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig, indicesCorrecao, InsertIndiceCorrecao, modelosIniciais, InsertModeloInicial, modelosCalculo, InsertModeloCalculo } from "../drizzle/schema";
+import { InsertUser, users, lotes, devedores, InsertDevedor, documentos, InsertDocumento, extracoes, InsertExtracao, clientes, InsertCliente, docConfigs, InsertDocConfig, indicesCorrecao, InsertIndiceCorrecao, modelosIniciais, InsertModeloInicial, modelosCalculo, InsertModeloCalculo, localUsers, InsertLocalUser } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -471,4 +471,27 @@ export async function deleteModeloCalculo(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.delete(modelosCalculo).where(eq(modelosCalculo.id, id));
+}
+
+// ─── Local Auth ─────────────────────────────────────────────────────────────
+
+export async function getLocalUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(localUsers).where(eq(localUsers.email, email.toLowerCase())).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getLocalUserById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(localUsers).where(eq(localUsers.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createLocalUser(data: InsertLocalUser) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(localUsers).values({ ...data, email: data.email.toLowerCase() });
+  return result;
 }

@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { LOCAL_SESSION_COOKIE } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -68,6 +69,9 @@ import {
 } from "./db";
 import { storagePut } from "./storage";
 import { getDadosPeticoes, gerarPeticoes } from "./gerarPeticoes";
+import { verifyLocalSession, signLocalSession, verifyPassword } from "./localAuth";
+import { getLocalUserByEmail, getLocalUserById } from "./db";
+import { parse as parseCookies } from "cookie";
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -79,6 +83,36 @@ export const appRouter = router({
       return {
         success: true,
       } as const;
+    }),
+
+    // ── Autenticação local (email/senha) ──────────────────────────────────
+    localLogin: publicProcedure
+      .input(z.object({ email: z.string().email(), password: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        const user = await getLocalUserByEmail(input.email);
+        if (!user) throw new Error("Email ou senha incorretos.");
+        const ok = await verifyPassword(input.password, user.passwordHash);
+        if (!ok) throw new Error("Email ou senha incorretos.");
+        const token = await signLocalSession({ localUserId: user.id, email: user.email, name: user.name ?? null });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(LOCAL_SESSION_COOKIE, token, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
+        return { id: user.id, email: user.email, name: user.name ?? null };
+      }),
+
+    localMe: publicProcedure.query(async ({ ctx }) => {
+      const cookies = parseCookies(ctx.req.headers.cookie ?? "");
+      const token = cookies[LOCAL_SESSION_COOKIE];
+      const session = await verifyLocalSession(token);
+      if (!session) return null;
+      const user = await getLocalUserById(session.localUserId);
+      if (!user) return null;
+      return { id: user.id, email: user.email, name: user.name ?? null };
+    }),
+
+    localLogout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(LOCAL_SESSION_COOKIE, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
     }),
   }),
 

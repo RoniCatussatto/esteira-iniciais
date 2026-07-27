@@ -99,6 +99,13 @@
       "when": 1785120999721,
       "tag": "0013_crazy_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1785186700957,
+      "tag": "0014_thick_synch",
+      "breakpoints": true
     }
   ]
 }

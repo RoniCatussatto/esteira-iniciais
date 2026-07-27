@@ -34,11 +34,21 @@ function labelToMesAno(label: string): string | null {
     jan: "01", fev: "02", mar: "03", abr: "04", mai: "05", jun: "06",
     jul: "07", ago: "08", set: "09", out: "10", nov: "11", dez: "12",
   };
-  const m = label.trim().match(/^([a-záéíóúâêôãõç]+)[\/\-](\d{4})$/i);
-  if (!m) return null;
-  const mes = meses[m[1].toLowerCase().slice(0, 3)];
-  if (!mes) return null;
-  return `${m[2]}-${mes}`;
+  const s = label.trim();
+  // Formato "Mmm/YYYY" ou "Mmm-YYYY" (ex: "Jan/2026")
+  const mNome = s.match(/^([a-záéíóúâêôãõç]+)[\/\-](\d{4})$/i);
+  if (mNome) {
+    const mes = meses[mNome[1].toLowerCase().slice(0, 3)];
+    if (!mes) return null;
+    return `${mNome[2]}-${mes}`;
+  }
+  // Formato "DD/MM/YYYY" (ex: "10/01/2026") — extrair mês e ano
+  const mData = s.match(/^(\d{1,2})\/(\d{2})\/(\d{4})$/);
+  if (mData) {
+    const mes = mData[2].padStart(2, "0");
+    return `${mData[3]}-${mes}`;
+  }
+  return null;
 }
 
 /** Converte "YYYY-MM" → "Mmm/YYYY" (ex: "2026-05" → "Mai/2026") */
@@ -193,7 +203,17 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
         // Determinar mes1 (mês de mora)
         let mes1Label: string;
         if (ext.moraEspecifica && ext.moraEspecifica.trim() !== "") {
-          mes1Label = ext.moraEspecifica.trim();
+          // moraEspecifica pode ser "DD/MM/YYYY" (data de vencimento de fatura)
+          // Converter para "Mmm/YYYY" para exibição na planilha
+          const mora = ext.moraEspecifica.trim();
+          const mData = mora.match(/^(\d{1,2})\/(\d{2})\/(\d{4})$/);
+          if (mData) {
+            const mesIdx = parseInt(mData[2]) - 1;
+            const labelsM = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+            mes1Label = `${labelsM[mesIdx]}/${mData[3]}`;
+          } else {
+            mes1Label = mora;
+          }
         } else if (devedor.vencBordero) {
           // Converter data "DD/MM/YYYY" para "Mmm/YYYY"
           const parts = devedor.vencBordero.split("/");
@@ -370,166 +390,256 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
 function gerarScript(): string {
   return `/**
  * gerar.js — Script de geração de planilhas de cálculo
- * 
- * Pré-requisitos:
- *   1. Node.js instalado (https://nodejs.org)
- *   2. Executar no terminal: npm install xlsx
- *
- * Uso:
- *   node gerar.js
- *
- * O script lê dados.json, substitui os placeholders nos modelos .xlsx
- * e salva as planilhas geradas na pasta "saida/".
  */
 
-const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
-// ─── Carregar dados ────────────────────────────────────────────────────────────
 const dados = JSON.parse(fs.readFileSync('dados.json', 'utf8'));
 const { devedores, lote, ultimoIndice } = dados;
 
-// Criar pasta de saída
 const saidaDir = path.join(__dirname, 'saida');
-if (!fs.existsSync(saidaDir)) fs.mkdirSync(saidaDir);
+if (!fs.existsSync(saidaDir)) fs.mkdirSync(saidaDir, { recursive: true });
 
 console.log('\\n=== GERADOR DE PLANILHAS DE CÁLCULO ===');
 console.log('Lote:', lote.nome);
-console.log('Índice de referência:', ultimoIndice.label);
 console.log('Total de devedores:', devedores.length);
 console.log('');
 
+let AdmZip;
+try {
+  AdmZip = require('adm-zip');
+} catch (e) {
+  console.error('[ERRO] adm-zip não encontrado. Execute: npm install adm-zip');
+  process.exit(1);
+}
+
+// Verificar se LibreOffice está disponível para PDF
+let libreofficePath = null;
+const libreofficeLocais = [
+  'soffice',
+  'libreoffice',
+  'C:\\\\\\\\Program Files\\\\\\\\LibreOffice\\\\\\\\program\\\\\\\\soffice.exe',
+  'C:\\\\\\\\Program Files (x86)\\\\\\\\LibreOffice\\\\\\\\program\\\\\\\\soffice.exe',
+];
+for (const loc of libreofficeLocais) {
+  try {
+    const r = spawnSync(loc, ['--version'], { timeout: 5000, encoding: 'utf8' });
+    if (r.status === 0) { libreofficePath = loc; break; }
+  } catch (_) {}
+}
+if (libreofficePath) {
+  console.log('LibreOffice encontrado:', libreofficePath);
+  console.log('PDFs serão gerados automaticamente.\\n');
+} else {
+  console.log('LibreOffice NÃO encontrado — apenas .xlsx será gerado.');
+  console.log('Para gerar PDF, instale em: https://www.libreoffice.org\\n');
+}
+
+let pdfsGerados = 0;
 let gerados = 0;
 let erros = 0;
 
-// ─── Processar cada devedor ────────────────────────────────────────────────────
 for (const devedor of devedores) {
   try {
     const modeloPath = path.join(__dirname, 'modelos', devedor.categoria + ' ' + devedor.qtdContratos + '.xlsx');
-    
     if (!fs.existsSync(modeloPath)) {
       console.error('  [ERRO] Modelo não encontrado:', modeloPath);
       erros++;
       continue;
     }
-
-    // Carregar o workbook modelo
-    const wb = XLSX.readFile(modeloPath, { cellFormula: true, cellStyles: true });
-    const sheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-
-    // Substituir placeholders célula a célula
-    substituirPlaceholders(ws, devedor);
-
-    // Salvar o arquivo gerado
     const nomeArquivo = devedor.nomeArquivo + '.xlsx';
     const saidaPath = path.join(saidaDir, nomeArquivo);
-    XLSX.writeFile(wb, saidaPath, { bookType: 'xlsx', type: 'buffer' });
-
+    gerarXlsx(modeloPath, saidaPath, devedor, AdmZip);
     console.log('  [OK]', nomeArquivo);
     gerados++;
+    // Gerar PDF via LibreOffice
+    if (libreofficePath) {
+      try {
+        const r = spawnSync(libreofficePath, [
+          '--headless', '--convert-to', 'pdf', '--outdir', saidaDir, saidaPath
+        ], { timeout: 30000, encoding: 'utf8' });
+        if (r.status === 0) {
+          console.log('  [PDF]', devedor.nomeArquivo + '.pdf');
+          pdfsGerados++;
+        } else {
+          console.error('  [ERRO PDF]', devedor.nome, ':', r.stderr);
+        }
+      } catch (pdfErr) {
+        console.error('  [ERRO PDF]', devedor.nome, ':', pdfErr?.message ?? String(pdfErr));
+      }
+    }
   } catch (err) {
-    console.error('  [ERRO]', devedor.nome, ':', (err as Error).message);
+    console.error('  [ERRO]', devedor.nome, ':', err?.message ?? String(err));
     erros++;
   }
 }
 
-console.log('');
-console.log('=== CONCLUÍDO ===');
-console.log('Gerados com sucesso:', gerados);
+console.log('\\n=== CONCLUÍDO ===');
+console.log('Planilhas geradas:', gerados);
+if (libreofficePath) console.log('PDFs gerados:', pdfsGerados);
 if (erros > 0) console.log('Com erro:', erros);
 console.log('Arquivos salvos em:', saidaDir);
 
-if (dados.avisos && dados.avisos.length > 0) {
-  console.log('\\nAVISOS:');
-  dados.avisos.forEach(a => console.log(' -', a));
+function gerarXlsx(modeloPath, saidaPath, devedor, AdmZip) {
+  const contratos = devedor.contratos;
+  const zip = new AdmZip(modeloPath);
+
+  let ssXml = zip.readAsText('xl/sharedStrings.xml');
+
+  // Extrair shared strings
+  const ssMapNovo = [];
+  const siRegex = /<si>([\\s\\S]*?)<\\/si>/g;
+  let siMatch;
+  while ((siMatch = siRegex.exec(ssXml)) !== null) {
+    const texts = [];
+    const tRegex = /<t[^>]*>([\\s\\S]*?)<\\/t>/g;
+    let tMatch;
+    while ((tMatch = tRegex.exec(siMatch[1])) !== null) {
+      texts.push(tMatch[1]);
+    }
+    ssMapNovo.push(texts.join(''));
+  }
+
+  // Substituições globais
+  const c0 = contratos[0] ?? {};
+  const globalSubs = {
+    '{mes1}': c0.mes1 ?? '',
+    '{mes2}': c0.mes2 ?? '',
+    '{honorarios}': devedor.honorarios ?? '0',
+  };
+
+  let ssXmlNovo = ssXml;
+  for (const [ph, val] of Object.entries(globalSubs)) {
+    const valXml = escapeXml(val);
+    ssXmlNovo = ssXmlNovo.split('<t>' + ph + '</t>').join('<t>' + valXml + '</t>');
+    ssXmlNovo = ssXmlNovo.split('<t xml:space="preserve">' + ph + '</t>').join('<t xml:space="preserve">' + valXml + '</t>');
+    ssXmlNovo = ssXmlNovo.split(ph).join(valXml);
+  }
+
+  // Reler mapa atualizado
+  const ssMapAtual = [];
+  const siRegex2 = /<si>([\\s\\S]*?)<\\/si>/g;
+  let siMatch2;
+  while ((siMatch2 = siRegex2.exec(ssXmlNovo)) !== null) {
+    const texts = [];
+    const tRegex2 = /<t[^>]*>([\\s\\S]*?)<\\/t>/g;
+    let tMatch2;
+    while ((tMatch2 = tRegex2.exec(siMatch2[1])) !== null) {
+      texts.push(tMatch2[1]);
+    }
+    ssMapAtual.push(texts.join(''));
+  }
+
+  const idxDp01 = ssMapAtual.indexOf('{dadosPlanilha01}');
+  const idxDp02 = ssMapAtual.indexOf('{dadosPlanilha02}');
+  const idxDp03 = ssMapAtual.indexOf('{dadosPlanilha03}');
+  const idxDp04 = ssMapAtual.indexOf('{dadosPlanilha04}');
+  const idxMulta = ssMapAtual.indexOf('{multa}');
+  const idxJuros = ssMapAtual.indexOf('{juros}');
+  const idxIndice1 = ssMapAtual.indexOf('{indice1}');
+  const idxIndice2 = ssMapAtual.indexOf('{indice2}');
+
+
+  // Criar novos shared strings por contrato
+  const novosStrings = [];
+  const baseIdx = ssMapAtual.length;
+  const contratoIdxMap = [];
+
+  for (let ci = 0; ci < contratos.length; ci++) {
+    const c = contratos[ci];
+    const dp01Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha01 ?? '');
+    const dp02Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha02 ?? '');
+    const dp03Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha03 ?? '');
+    const dp04Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha04 ?? '');
+    const ind1Idx = baseIdx + novosStrings.length; novosStrings.push(c.indice1 ?? '');
+    const ind2Idx = baseIdx + novosStrings.length; novosStrings.push(c.indice2 ?? '');
+    contratoIdxMap.push({ dp01Idx, dp02Idx, dp03Idx, dp04Idx, ind1Idx, ind2Idx });
+  }
+
+  const novasEntradas = novosStrings.map(s => '<si><t>' + escapeXml(s) + '</t></si>').join('');
+  ssXmlNovo = ssXmlNovo.replace('</sst>', novasEntradas + '</sst>');
+  const totalStrings = ssMapAtual.length + novosStrings.length;
+  ssXmlNovo = ssXmlNovo.replace(/(<sst[^>]*\\s)count="\\d+"/, '$1count="' + totalStrings + '"');
+  ssXmlNovo = ssXmlNovo.replace(/(<sst[^>]*\\s)uniqueCount="\\d+"/, '$1uniqueCount="' + totalStrings + '"');
+
+  // Processar sheet1.xml
+  let sheetXml = zip.readAsText('xl/worksheets/sheet1.xml');
+  let contratoLinhaIdx = 0;
+
+  sheetXml = sheetXml.replace(/<row([^>]*)>([\\s\\S]*?)<\\/row>/g, (rowMatch, rowAttrs, rowContent) => {
+    const temDp01 = idxDp01 >= 0 && rowContent.includes('<v>' + idxDp01 + '</v>');
+    if (!temDp01) return rowMatch;
+
+    const ci = contratoLinhaIdx++;
+    const c = contratos[ci] ?? contratos[contratos.length - 1] ?? {};
+    const idxMap = contratoIdxMap[ci] ?? contratoIdxMap[contratoIdxMap.length - 1];
+    if (!idxMap) return rowMatch;
+
+    let novoContent = rowContent;
+    if (idxDp01 >= 0) novoContent = novoContent.split('<v>' + idxDp01 + '</v>').join('<v>' + idxMap.dp01Idx + '</v>');
+    if (idxDp02 >= 0) novoContent = novoContent.split('<v>' + idxDp02 + '</v>').join('<v>' + idxMap.dp02Idx + '</v>');
+    if (idxDp03 >= 0) novoContent = novoContent.split('<v>' + idxDp03 + '</v>').join('<v>' + idxMap.dp03Idx + '</v>');
+    if (idxDp04 >= 0) novoContent = novoContent.split('<v>' + idxDp04 + '</v>').join('<v>' + idxMap.dp04Idx + '</v>');
+    if (idxIndice1 >= 0) novoContent = novoContent.split('<v>' + idxIndice1 + '</v>').join('<v>' + idxMap.ind1Idx + '</v>');
+    if (idxIndice2 >= 0) novoContent = novoContent.split('<v>' + idxIndice2 + '</v>').join('<v>' + idxMap.ind2Idx + '</v>');
+
+    // Substituir {multa} → fórmula
+    if (idxMulta >= 0 && novoContent.includes('<v>' + idxMulta + '</v>')) {
+      const rowNumMatch = rowAttrs.match(/\\br="(\\d+)"/);
+      const rowNum = rowNumMatch ? rowNumMatch[1] : '0';
+      const pct = c.multa === '2%' ? '2' : '0';
+      novoContent = novoContent.replace(
+        new RegExp('<c([^>]*)t="s"([^>]*)><v>' + idxMulta + '<\\\\/v><\\\\/c>'),
+        '<c$1$2><f>D' + rowNum + '*' + pct + '%</f><v>0</v></c>'
+      );
+    }
+
+    // Substituir {juros} → fórmula
+    if (idxJuros >= 0 && novoContent.includes('<v>' + idxJuros + '</v>')) {
+      const rowNumMatch = rowAttrs.match(/\\br="(\\d+)"/);
+      const rowNum = rowNumMatch ? rowNumMatch[1] : '0';
+      const pct = c.pctJuros ? c.pctJuros.replace('%', '') : '1';
+      novoContent = novoContent.replace(
+        new RegExp('<c([^>]*)t="s"([^>]*)><v>' + idxJuros + '<\\\\/v><\\\\/c>'),
+        '<c$1$2><f>E' + rowNum + '*' + pct + '%</f><v>0</v></c>'
+      );
+    }
+
+    return '<row' + rowAttrs + '>' + novoContent + '</row>';
+  });
+
+  // Linhas com indice1/indice2 mas sem dp01 (cartão/cheque)
+  sheetXml = sheetXml.replace(/<row([^>]*)>([\\s\\S]*?)<\\/row>/g, (rowMatch, rowAttrs, rowContent) => {
+    const temIndice = idxIndice1 >= 0 && rowContent.includes('<v>' + idxIndice1 + '</v>');
+    const temDp01 = idxDp01 >= 0 && rowContent.includes('<v>' + idxDp01 + '</v>');
+    if (!temIndice || temDp01) return rowMatch;
+
+    const contratoSemDp01 = contratos.find(c => !c.dadoPlanilha01 || c.dadoPlanilha01.trim() === '');
+    const ci = contratoSemDp01 ? contratos.indexOf(contratoSemDp01) : contratos.length - 1;
+    const idxMap = contratoIdxMap[ci];
+    if (!idxMap) return rowMatch;
+
+    let novoContent = rowContent;
+    if (idxIndice1 >= 0) novoContent = novoContent.split('<v>' + idxIndice1 + '</v>').join('<v>' + idxMap.ind1Idx + '</v>');
+    if (idxIndice2 >= 0) novoContent = novoContent.split('<v>' + idxIndice2 + '</v>').join('<v>' + idxMap.ind2Idx + '</v>');
+
+    return '<row' + rowAttrs + '>' + novoContent + '</row>';
+  });
+
+  zip.updateFile('xl/sharedStrings.xml', Buffer.from(ssXmlNovo, 'utf8'));
+  zip.updateFile('xl/worksheets/sheet1.xml', Buffer.from(sheetXml, 'utf8'));
+  zip.writeZip(saidaPath);
 }
 
-// ─── Função de substituição de placeholders ────────────────────────────────────
-function substituirPlaceholders(ws, devedor) {
-  const contratos = devedor.contratos;
-  let contratoIdx = 0;
-
-  // Iterar por todas as células
-  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:Z100');
-  
-  for (let R = range.s.r; R <= range.e.r; R++) {
-    for (let C = range.s.c; C <= range.e.c; C++) {
-      const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      const cell = ws[addr];
-      if (!cell) continue;
-
-      // Verificar se é uma célula com placeholder
-      const val = String(cell.v ?? cell.f ?? '');
-      if (!val.includes('{')) continue;
-
-      // Detectar qual contrato (baseado no índice do placeholder numérico)
-      // Placeholders com número: {dadoPlanilha01_1}, {dadoPlanilha01_2}, etc.
-      // Placeholders sem número: {dadoPlanilha01} (contrato atual na sequência)
-      
-      const numMatch = val.match(/\\{[^}]+_(\\d+)\\}/);
-      const idx = numMatch ? parseInt(numMatch[1]) - 1 : contratoIdx;
-      const contrato = contratos[idx] ?? contratos[contratos.length - 1] ?? {};
-
-      let novoVal = val;
-      
-      // Substituições simples
-      novoVal = novoVal.replace(/\\{dadoPlanilha01\\}/g, contrato.dadoPlanilha01 ?? '');
-      novoVal = novoVal.replace(/\\{dadoPlanilha02\\}/g, contrato.dadoPlanilha02 ?? '');
-      novoVal = novoVal.replace(/\\{dadoPlanilha03\\}/g, contrato.dadoPlanilha03 ?? '');
-      novoVal = novoVal.replace(/\\{dadoPlanilha04\\}/g, contrato.dadoPlanilha04 ?? '');
-      novoVal = novoVal.replace(/\\{mes1\\}/g, contrato.mes1 ?? '');
-      novoVal = novoVal.replace(/\\{mes2\\}/g, contrato.mes2 ?? '');
-      novoVal = novoVal.replace(/\\{indice1\\}/g, contrato.indice1 ?? '');
-      novoVal = novoVal.replace(/\\{indice2\\}/g, contrato.indice2 ?? '');
-      novoVal = novoVal.replace(/\\{honorarios\\}/g, devedor.honorarios ?? '0');
-
-      // Substituição especial: {multa} → fórmula Excel
-      if (novoVal.includes('{multa}')) {
-        // Célula imediatamente à esquerda
-        const celulaEsquerda = C > 0 ? XLSX.utils.encode_cell({ r: R, c: C - 1 }) : null;
-        const refEsquerda = celulaEsquerda ?? 'A1';
-        const pct = contrato.multa === '2%' ? '2%' : '0%';
-        novoVal = novoVal.replace(/\\{multa\\}/g, '');
-        cell.f = refEsquerda + '*' + pct;
-        cell.v = 0;
-        cell.t = 'n';
-        continue;
-      }
-
-      // Substituição especial: {juros} → fórmula Excel
-      if (novoVal.includes('{juros}')) {
-        const celulaEsquerda = C > 0 ? XLSX.utils.encode_cell({ r: R, c: C - 1 }) : null;
-        const refEsquerda = celulaEsquerda ?? 'A1';
-        const pct = contrato.pctJuros ?? '1%';
-        novoVal = novoVal.replace(/\\{juros\\}/g, '');
-        cell.f = refEsquerda + '*' + pct;
-        cell.v = 0;
-        cell.t = 'n';
-        continue;
-      }
-
-      // Atualizar célula
-      if (novoVal !== val) {
-        // Verificar se o resultado é numérico
-        const num = parseFloat(novoVal.replace(',', '.'));
-        if (!isNaN(num) && novoVal.trim() !== '') {
-          cell.v = num;
-          cell.t = 'n';
-        } else {
-          cell.v = novoVal;
-          cell.t = 's';
-        }
-        delete cell.f; // remover fórmula se havia
-      }
-
-      // Avançar índice de contrato quando encontrar dadoPlanilha01 sem número
-      if (val.includes('{dadoPlanilha01}') && !numMatch) {
-        contratoIdx++;
-      }
-    }
-  }
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 `;
 }
@@ -551,12 +661,17 @@ INSTRUÇÕES DE USO:
 2. Abra o terminal (Prompt de Comando ou PowerShell) nesta pasta.
 
 3. Instale a dependência necessária (apenas na primeira vez):
-   npm install xlsx
+   npm install adm-zip
 
 4. Execute o script:
    node gerar.js
 
 5. As planilhas geradas serão salvas na pasta "saida/" dentro desta pasta.
+
+GERAÇÃO DE PDF (opcional):
+   Para gerar PDF automaticamente, instale o LibreOffice:
+   https://www.libreoffice.org
+   O script detecta automaticamente se o LibreOffice está instalado.
 
 ESTRUTURA DO PACOTE:
   dados.json    — Dados calculados de todos os devedores

@@ -103,7 +103,7 @@ export default function LoginPage() {
                 onClick={() => startLogin()}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
               >
-                Esqueci minha senha (entrar com Manus)
+                Esqueci minha senha
               </button>
             </div>
           </CardContent>

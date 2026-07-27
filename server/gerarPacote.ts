@@ -8,7 +8,8 @@
  *   - README.txt: instruções de uso
  */
 import { Router } from "express";
-import { Archiver, ZipArchive } from "archiver";
+import AdmZip from "adm-zip";
+import { storageGetSignedUrl } from "./storage";
 import {
   getLoteById,
   getDevedoresByLote,
@@ -119,6 +120,10 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
   }
 
   try {
+    // Estender timeout do response para 120s (evita 504 em lotes grandes)
+    req.socket.setTimeout(120_000);
+
+    console.log(`[GerarPacote] Iniciando loteId=${loteId}`);
     // 1. Carregar dados do lote
     const lote = await getLoteById(loteId);
     if (!lote) {
@@ -126,6 +131,7 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
       return;
     }
 
+    console.log(`[GerarPacote] Banco: carregando dados...`);
     const [devedores, todasExtracoes, todosIndices, ultimoIndice, clientes] = await Promise.all([
       getDevedoresByLote(loteId),
       getExtracoesByLote(loteId),
@@ -133,6 +139,7 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
       getUltimoIndice(),
       getAllClientes(),
     ]);
+    console.log(`[GerarPacote] Banco: ${devedores.length} devedores, ${todasExtracoes.length} extracoes, ${todosIndices.length} indices`);
 
     if (!ultimoIndice) {
       res.status(400).json({ error: "Nenhum índice de correção cadastrado." });
@@ -153,7 +160,7 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
 
     // 2. Montar dados.json com todos os cálculos
     const dadosDevedores = [];
-    const modelosNecessarios: Map<string, { categoria: string; qtd: number; fileKey: string }> = new Map();
+    const modelosNecessarios: Map<string, { categoria: string; qtd: number; fileKey: string; fileUrl: string }> = new Map();
     const avisos: string[] = [];
 
     for (const devedor of devedores) {
@@ -250,6 +257,7 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
             categoria,
             qtd: qtdContratos,
             fileKey: modeloDB.fileKey,
+            fileUrl: modeloDB.fileUrl,
           });
         } else {
           avisos.push(`Modelo de planilha não encontrado: categoria "${categoria}", ${qtdContratos} contrato(s).`);
@@ -273,16 +281,35 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
       });
     }
 
+    console.log(`[GerarPacote] Baixando ${modelosNecessarios.size} modelo(s)...`);
     // 3. Baixar os modelos .xlsx necessários
+    // Baixar todos os modelos em paralelo usando fileUrl diretamente (sem presign)
     const modelosBuffers: Map<string, Buffer> = new Map();
-    for (const [key, info] of Array.from(modelosNecessarios.entries())) {
-      const buf = await baixarArquivo(info.fileKey);
-      if (buf) {
-        modelosBuffers.set(key, buf);
-      } else {
-        avisos.push(`Não foi possível baixar o modelo: ${info.categoria} (${info.qtd} contratos).`);
-      }
-    }
+    await Promise.all(
+      Array.from(modelosNecessarios.entries()).map(async ([key, info]) => {
+        try {
+          // Extrair a chave do path relativo /manus-storage/<key>
+          const fileKey = info.fileUrl.replace(/^\/manus-storage\//, "");
+          console.log(`[GerarPacote] Obtendo URL presignada para: ${info.categoria} ${info.qtd} | key: ${fileKey.substring(0, 60)}`);
+          const signedUrl = await storageGetSignedUrl(fileKey);
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 20_000);
+          const resp = await fetch(signedUrl, { signal: controller.signal });
+          clearTimeout(timer);
+          if (!resp.ok) {
+            avisos.push(`Erro ao baixar modelo "${info.categoria} ${info.qtd}": HTTP ${resp.status}`);
+            console.error(`[GerarPacote] Erro HTTP ${resp.status} ao baixar ${info.categoria} ${info.qtd}`);
+            return;
+          }
+          const buf = Buffer.from(await resp.arrayBuffer());
+          modelosBuffers.set(key, buf);
+          console.log(`[GerarPacote] OK: ${info.categoria} ${info.qtd} (${buf.length} bytes)`);
+        } catch (err: any) {
+          avisos.push(`Timeout/erro ao baixar modelo "${info.categoria} ${info.qtd}": ${err?.message ?? err}`);
+          console.error(`[GerarPacote] ERRO: ${info.categoria} ${info.qtd}:`, err?.message);
+        }
+      })
+    );
 
     // 4. Montar o script gerar.js
     const gerarJs = gerarScript();
@@ -308,30 +335,28 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
 
     // 7. Criar o ZIP e enviar como download
     const nomeLote = (lote.nome ?? "lote").replace(/[^a-zA-Z0-9_\- ]/g, "_");
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="Pacote_${nomeLote}.zip"`);
 
-    const archive = new Archiver({ statConcurrency: 4 });
-    (archive as any)._module = new ZipArchive({ zlib: { level: 6 } });
-    archive.on("error", (err: Error) => {
-      console.error("[GerarPacote] Erro no archiver:", err);
-      if (!res.headersSent) res.status(500).json({ error: "Erro ao criar ZIP" });
-    });
-    archive.pipe(res);
-
-    // Adicionar arquivos ao ZIP
-    archive.append(dadosJson, { name: "dados.json" });
-    archive.append(gerarJs, { name: "gerar.js" });
-    archive.append(readme, { name: "README.txt" });
+    // Criar ZIP em memória com adm-zip
+    const zip = new AdmZip();
+    zip.addFile("dados.json", Buffer.from(dadosJson, "utf8"));
+    zip.addFile("gerar.js", Buffer.from(gerarJs, "utf8"));
+    zip.addFile("README.txt", Buffer.from(readme, "utf8"));
 
     // Adicionar modelos .xlsx
     for (const [key, buf] of Array.from(modelosBuffers.entries())) {
       const info = modelosNecessarios.get(key)!;
-      const nomeModelo = `${info.categoria} ${info.qtd}.xlsx`;
-      archive.append(buf, { name: `modelos/${nomeModelo}` });
+      const nomeModelo = `modelos/${info.categoria} ${info.qtd}.xlsx`;
+      zip.addFile(nomeModelo, buf);
     }
 
-    await archive.finalize();
+    const zipBuffer = zip.toBuffer();
+    console.log(`[GerarPacote] ZIP gerado: ${zipBuffer.length} bytes.`);
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="Pacote_${nomeLote}.zip"`);
+    res.setHeader("Content-Length", String(zipBuffer.length));
+    res.end(zipBuffer);
+    console.log(`[GerarPacote] ZIP enviado com sucesso.`);
   } catch (err) {
     console.error("[GerarPacote] Erro:", err);
     if (!res.headersSent) {

@@ -206,7 +206,7 @@ export function extrairPlaceholders(docxBuffer: Buffer): string[] {
     const fullText = paragraphTexts.join('\n');
     const allText = fullText + '\n' + xmlContent;
     // Buscar todos os {PLACEHOLDER} — letras maiúsculas, underscores, números
-    const matches = allText.match(/\{([A-Z0-9_]+)\}/g) ?? [];
+    const matches = allText.match(/\{([A-Za-z0-9_]+)\}/g) ?? [];
     // Remover duplicatas e retornar apenas o nome sem chaves
     const unique = Array.from(new Set(matches.map(m => m.slice(1, -1))));
     return unique;

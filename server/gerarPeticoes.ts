@@ -184,8 +184,30 @@ export function extrairPlaceholders(docxBuffer: Buffer): string[] {
     const zip = new PizZip(docxBuffer);
     // Ler o document.xml
     const xmlContent = zip.file("word/document.xml")?.asText() ?? "";
+    // O Word fragmenta o texto em múltiplos <w:r> (runs), então "{VEICULO}" pode aparecer
+    // como "{VEIC" num run e "ULO}" em outro. Precisamos extrair o texto puro de cada
+    // parágrafo (<w:p>) antes de aplicar o regex.
+    //
+    // Estratégia 1: extrair texto de cada <w:p> concatenando todos os <w:t> dentro dele
+    const paragraphTexts: string[] = [];
+    const paraRegex = /<w:p[\s>][\s\S]*?<\/w:p>/g;
+    let paraMatch: RegExpExecArray | null;
+    while ((paraMatch = paraRegex.exec(xmlContent)) !== null) {
+      const paraXml = paraMatch[0];
+      // Extrair todos os <w:t> e concatenar
+      const textParts: string[] = [];
+      const tRegex = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g;
+      let tMatch: RegExpExecArray | null;
+      while ((tMatch = tRegex.exec(paraXml)) !== null) {
+        textParts.push(tMatch[1]);
+      }
+      paragraphTexts.push(textParts.join(''));
+    }
+    // Estratégia 2: também buscar no XML bruto (para placeholders não fragmentados)
+    const fullText = paragraphTexts.join('\n');
+    const allText = fullText + '\n' + xmlContent;
     // Buscar todos os {PLACEHOLDER} — letras maiúsculas, underscores, números
-    const matches = xmlContent.match(/\{([A-Z0-9_]+)\}/g) ?? [];
+    const matches = allText.match(/\{([A-Z0-9_]+)\}/g) ?? [];
     // Remover duplicatas e retornar apenas o nome sem chaves
     const unique = Array.from(new Set(matches.map(m => m.slice(1, -1))));
     return unique;

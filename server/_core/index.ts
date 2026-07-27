@@ -12,7 +12,7 @@ import { uploadRouter } from "../upload";
 import { scheduledRouter } from "../scheduledJobs";
 import { uploadDocsRouter } from "../uploadDocs";
 import docConfigChatRouter from "../docConfigChat";
-
+import { gerarPacoteRouter } from "../gerarPacote";
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -22,7 +22,6 @@ function isPortAvailable(port: number): Promise<boolean> {
     server.on("error", () => resolve(false));
   });
 }
-
 async function findAvailablePort(startPort: number = 3000): Promise<number> {
   for (let port = startPort; port < startPort + 20; port++) {
     if (await isPortAvailable(port)) {
@@ -31,7 +30,6 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   }
   throw new Error(`No available port found starting from ${startPort}`);
 }
-
 async function startServer() {
   const app = express();
   const server = createServer(app);
@@ -44,6 +42,8 @@ async function startServer() {
   app.use("/api/upload", uploadRouter);
   app.use("/api/upload/docs", uploadDocsRouter);
   app.use("/api/doc-config-chat", docConfigChatRouter);
+  // Gerar pacote ZIP para download local
+  app.use("/api/gerar-pacote", gerarPacoteRouter);
   // Scheduled jobs (Heartbeat callbacks — must be before tRPC)
   app.use("/api/scheduled", scheduledRouter);
   // tRPC API
@@ -60,17 +60,13 @@ async function startServer() {
   } else {
     serveStatic(app);
   }
-
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
-
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
-
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
 }
-
 startServer().catch(console.error);

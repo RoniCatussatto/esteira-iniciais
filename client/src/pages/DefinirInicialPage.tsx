@@ -395,7 +395,7 @@ export default function DefinirInicialPage() {
           <Button
             size="sm"
             className="gap-2 ml-auto"
-            onClick={() => toast.info("Próxima etapa em breve.")}
+            onClick={() => navigate(`/lote/${loteId}/gerar-planilhas`)}
           >
             Avançar — Gerar Planilhas <ArrowRight className="w-4 h-4" />
           </Button>

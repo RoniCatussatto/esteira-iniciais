@@ -14,6 +14,7 @@ import IndicesPage from "./pages/IndicesPage";
 import DefinirInicialPage from "./pages/DefinirInicialPage";
 import ModelosCalculoPage from "./pages/ModelosCalculoPage";
 import ModelosIniciaisPage from "./pages/ModelosIniciaisPage";
+import GerarPlanilhasPage from "./pages/GerarPlanilhasPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -28,6 +29,7 @@ function Router() {
       <Route path={"/indices"} component={IndicesPage} />
       <Route path={"/modelos-iniciais"} component={ModelosIniciaisPage} />
       <Route path={"/modelos-calculo"} component={ModelosCalculoPage} />
+      <Route path={"/lote/:id/gerar-planilhas"} component={GerarPlanilhasPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

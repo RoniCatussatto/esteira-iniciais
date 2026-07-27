@@ -552,10 +552,19 @@ function gerarXlsx(modeloPath, saidaPath, devedor, AdmZip) {
     const dp01Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha01 ?? '');
     const dp02Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha02 ?? '');
     const dp03Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha03 ?? '');
-    const dp04Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha04 ?? '');
-    const ind1Idx = baseIdx + novosStrings.length; novosStrings.push(c.indice1 ?? '');
-    const ind2Idx = baseIdx + novosStrings.length; novosStrings.push(c.indice2 ?? '');
-    contratoIdxMap.push({ dp01Idx, dp02Idx, dp03Idx, dp04Idx, ind1Idx, ind2Idx });
+    // dp04 = saldo devedor/débito: tentar converter para numérico (trocar vírgula por ponto)
+    const dp04Raw = c.dadoPlanilha04 ?? '';
+    // Formato BR: 1.234,56 → 1234.56 (remover pontos de milhar, trocar vírgula decimal por ponto)
+    const dp04Num = parseFloat(dp04Raw.replace(/\\.(?=\\d{3}[,.])/g, '').replace(',', '.'));
+    const dp04IsNum = !isNaN(dp04Num) && dp04Raw.trim() !== '';
+    const dp04Idx = baseIdx + novosStrings.length;
+    if (!dp04IsNum) novosStrings.push(dp04Raw); // só adiciona como string se não for número
+    const dp04Val = dp04IsNum ? String(dp04Num) : null;
+    // indice1 e indice2 serão inseridos como valores numéricos diretamente no sheet1.xml
+    // (não como shared strings) para que as fórmulas calculem corretamente
+    const ind1Val = (c.indice1 ?? '').replace(',', '.');
+    const ind2Val = (c.indice2 ?? '').replace(',', '.');
+    contratoIdxMap.push({ dp01Idx, dp02Idx, dp03Idx, dp04Idx, dp04Val, dp04IsNum, ind1Val, ind2Val });
   }
 
   const novasEntradas = novosStrings.map(s => '<si><t>' + escapeXml(s) + '</t></si>').join('');
@@ -582,8 +591,28 @@ function gerarXlsx(modeloPath, saidaPath, devedor, AdmZip) {
     if (idxDp02 >= 0) novoContent = novoContent.split('<v>' + idxDp02 + '</v>').join('<v>' + idxMap.dp02Idx + '</v>');
     if (idxDp03 >= 0) novoContent = novoContent.split('<v>' + idxDp03 + '</v>').join('<v>' + idxMap.dp03Idx + '</v>');
     if (idxDp04 >= 0) novoContent = novoContent.split('<v>' + idxDp04 + '</v>').join('<v>' + idxMap.dp04Idx + '</v>');
-    if (idxIndice1 >= 0) novoContent = novoContent.split('<v>' + idxIndice1 + '</v>').join('<v>' + idxMap.ind1Idx + '</v>');
-    if (idxIndice2 >= 0) novoContent = novoContent.split('<v>' + idxIndice2 + '</v>').join('<v>' + idxMap.ind2Idx + '</v>');
+    // Converter dp04 (saldo devedor) para numérico se possível
+    // NOTA: usar dp04Idx (novo índice) pois idxDp04 já foi substituído na linha acima
+    if (idxDp04 >= 0 && idxMap.dp04IsNum) {
+      novoContent = novoContent.replace(
+        new RegExp('<c((?:[^>]*?)\\\\s)t="s"([^>]*)><v>' + idxMap.dp04Idx + '<\\\\/v><\\\\/c>'),
+        (m, pre, post) => '<c' + pre.trimEnd() + post + '><v>' + idxMap.dp04Val + '</v></c>'
+      );
+    }
+    // Converter células de índice de shared string para numérico (sem t="s")
+    // Regex: <c atributos t="s" mais_atributos><v>IDX</v></c> → <c atributos sem_t><v>VALOR</v></c>
+    if (idxIndice1 >= 0) {
+      novoContent = novoContent.replace(
+        new RegExp('<c((?:[^>]*?)\\\\s)t="s"([^>]*)><v>' + idxIndice1 + '<\\\\/v><\\\\/c>'),
+        (m, pre, post) => '<c' + pre.trimEnd() + post + '><v>' + idxMap.ind1Val + '</v></c>'
+      );
+    }
+    if (idxIndice2 >= 0) {
+      novoContent = novoContent.replace(
+        new RegExp('<c((?:[^>]*?)\\\\s)t="s"([^>]*)><v>' + idxIndice2 + '<\\\\/v><\\\\/c>'),
+        (m, pre, post) => '<c' + pre.trimEnd() + post + '><v>' + idxMap.ind2Val + '</v></c>'
+      );
+    }
 
     // Substituir {multa} → fórmula
     if (idxMulta >= 0 && novoContent.includes('<v>' + idxMulta + '</v>')) {
@@ -622,14 +651,30 @@ function gerarXlsx(modeloPath, saidaPath, devedor, AdmZip) {
     if (!idxMap) return rowMatch;
 
     let novoContent = rowContent;
-    if (idxIndice1 >= 0) novoContent = novoContent.split('<v>' + idxIndice1 + '</v>').join('<v>' + idxMap.ind1Idx + '</v>');
-    if (idxIndice2 >= 0) novoContent = novoContent.split('<v>' + idxIndice2 + '</v>').join('<v>' + idxMap.ind2Idx + '</v>');
+    if (idxIndice1 >= 0) {
+      novoContent = novoContent.replace(
+        new RegExp('<c((?:[^>]*?)\\\\s)t="s"([^>]*)><v>' + idxIndice1 + '<\\\\/v><\\\\/c>'),
+        (m, pre, post) => '<c' + pre.trimEnd() + post + '><v>' + idxMap.ind1Val + '</v></c>'
+      );
+    }
+    if (idxIndice2 >= 0) {
+      novoContent = novoContent.replace(
+        new RegExp('<c((?:[^>]*?)\\\\s)t="s"([^>]*)><v>' + idxIndice2 + '<\\\\/v><\\\\/c>'),
+        (m, pre, post) => '<c' + pre.trimEnd() + post + '><v>' + idxMap.ind2Val + '</v></c>'
+      );
+    }
 
     return '<row' + rowAttrs + '>' + novoContent + '</row>';
   });
 
   zip.updateFile('xl/sharedStrings.xml', Buffer.from(ssXmlNovo, 'utf8'));
   zip.updateFile('xl/worksheets/sheet1.xml', Buffer.from(sheetXml, 'utf8'));
+
+  // Forçar recálculo completo ao abrir o arquivo
+  let wbXml = zip.readAsText('xl/workbook.xml');
+  wbXml = wbXml.replace(/<calcPr([^/]*)\\/>/, '<calcPr$1 fullCalcOnLoad="1"/>');
+  zip.updateFile('xl/workbook.xml', Buffer.from(wbXml, 'utf8'));
+
   zip.writeZip(saidaPath);
 }
 

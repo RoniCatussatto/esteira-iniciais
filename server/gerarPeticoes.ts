@@ -3,7 +3,6 @@
  * Serviço responsável por gerar petições iniciais (.docx e .pdf) a partir de
  * modelos .docx armazenados no S3, substituindo placeholders com dados dos devedores.
  */
-import { execSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -345,8 +344,10 @@ export async function getDadosPeticoes(loteId: number): Promise<DadosPeticaoDeve
     if (valoresPlaceholders.hasOwnProperty('VALOR_CAUSA')) valoresPlaceholders['VALOR_CAUSA'] = valorCausaExtenso;
     if (valoresPlaceholders.hasOwnProperty('PARAGRAFO_INICIAL')) valoresPlaceholders['PARAGRAFO_INICIAL'] = cliente?.paragrafaInicial ?? '';
     if (valoresPlaceholders.hasOwnProperty('PLANILHA')) valoresPlaceholders['PLANILHA'] = '';
-    if (valoresPlaceholders.hasOwnProperty('VENC_INICIAL')) valoresPlaceholders['VENC_INICIAL'] = dev.vencBordero ?? '';
-    if (valoresPlaceholders.hasOwnProperty('VENC_FINAL')) valoresPlaceholders['VENC_FINAL'] = dev.vencBordero ?? '';
+    // VENC_INICIAL = dadoPlanilha02 e VENC_FINAL = dadoPlanilha03 do contrato de empréstimo
+    const extracaoEmprestimo = extracoesDev.find(e => e.tipoContrato === 'emprestimo') ?? extracoesDev[0] ?? null;
+    if (valoresPlaceholders.hasOwnProperty('VENC_INICIAL')) valoresPlaceholders['VENC_INICIAL'] = extracaoEmprestimo?.dadoPlanilha02 ?? '';
+    if (valoresPlaceholders.hasOwnProperty('VENC_FINAL')) valoresPlaceholders['VENC_FINAL'] = extracaoEmprestimo?.dadoPlanilha03 ?? '';
     if (valoresPlaceholders.hasOwnProperty('VALOR')) valoresPlaceholders['VALOR'] = dev.valorBordero ?? '';
     if (valoresPlaceholders.hasOwnProperty('VEICULO')) valoresPlaceholders['VEICULO'] = dev.veiculoModelo ?? '';
     if (valoresPlaceholders.hasOwnProperty('PLACA')) valoresPlaceholders['PLACA'] = dev.veiculoPlaca ?? '';
@@ -463,15 +464,6 @@ export async function gerarPeticoes(input: GerarPeticoesInput): Promise<GerarPet
         const docxPath = path.join(tmpDir, `${nomeArquivo}.docx`);
         fs.writeFileSync(docxPath, docxBuffer);
 
-        // Converter para PDF via LibreOffice
-        try {
-          execSync(`libreoffice --headless --convert-to pdf --outdir "${tmpDir}" "${docxPath}"`, {
-            timeout: 60000,
-            stdio: 'pipe',
-          });
-        } catch (pdfErr) {
-          console.error(`Aviso: falha ao converter PDF para ${nomeArquivo}:`, pdfErr);
-        }
 
         totalGerados++;
       } catch (err: any) {

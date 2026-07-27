@@ -191,8 +191,8 @@ export default function GerarPeticoesPage() {
                 href={resultado.zipUrl}
                 className="inline-flex items-center gap-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-1.5 hover:bg-green-100 transition-colors"
               >
-                <Download className="w-4 h-4" />
-                Baixar ZIP ({resultado.totalGerados} petição{resultado.totalGerados !== 1 ? 'ões' : ''})
+               <Download className="w-4 h-4" />
+                Baixar ZIP ({resultado.totalGerados} {resultado.totalGerados !== 1 ? 'petições' : 'petição'})
               </a>
             )}
             <Button

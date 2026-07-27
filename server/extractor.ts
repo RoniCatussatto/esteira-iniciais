@@ -68,6 +68,7 @@ export interface CamposExtraidos {
   nomeDocumento?: string;
   numeroContratoIdentificado?: string | null; // contrato identificado no nome do arquivo
   prioridade?: number; // quanto menor, maior a prioridade (0 = Fatura, 1 = Extrato, etc.)
+  tipoContrato?: "emprestimo" | "cheque" | "cartao"; // tipo inferido pelo nome do documento
 }
 
 /** Item do resultado da triagem: um documento e a regra que o identificou */
@@ -611,6 +612,7 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
             dadoPlanilha04: isAlvo ? (campos.dadoPlanilha04 ?? null) : null,
             multa2pct: isAlvo ? (campos.multa2pct ?? "branco") : "branco",
             moraEspecifica: isAlvo ? (campos.moraEspecifica ?? null) : null,
+            tipoContrato: isAlvo ? (campos.tipoContrato ?? "emprestimo") : "emprestimo",
           };
         }));
         console.log(`[Extractor] Extrações inicializadas: devedor ${devedorId}, ${contratos.length} contrato(s)${contratoAlvo ? `, dados aplicados apenas em "${contratoAlvo}"` : ""}`);
@@ -635,6 +637,7 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
         dadoPlanilha04: campos.dadoPlanilha04 ?? null,
         multa2pct: campos.multa2pct ?? "branco",
         moraEspecifica: campos.moraEspecifica ?? null,
+        tipoContrato: campos.tipoContrato ?? "emprestimo",
       });
       console.log(`[Extractor] Contrato "${contratoAlvo}" não encontrado — inserido novo registro`);
     } else {
@@ -657,6 +660,10 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
         // multa2pct e moraEspecifica: sobrescreve apenas se ainda "branco"/nulo
         if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco")) updateDataPorExt.multa2pct = campos.multa2pct;
         if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) updateDataPorExt.moraEspecifica = campos.moraEspecifica;
+        // tipoContrato: sobrescreve apenas se ainda for o default "emprestimo" (pode ter sido definido por outro doc)
+        if (campos.tipoContrato !== undefined && (!ext.tipoContrato || ext.tipoContrato === "emprestimo")) {
+          updateDataPorExt.tipoContrato = campos.tipoContrato;
+        }
         if (Object.keys(updateDataPorExt).length > 0) {
           await db.update(extracoes).set(updateDataPorExt).where(eq(extracoes.id, ext.id));
         }
@@ -739,6 +746,17 @@ async function _finalizarExtracaoItem(
     // Propagar o contrato identificado na triagem para a gravação
     campos.numeroContratoIdentificado = item.numeroContratoNoNome ?? null;
     console.log(`[Extractor] Contrato alvo para gravação: ${campos.numeroContratoIdentificado ?? "(todos)"}`);
+
+    // Inferir tipoContrato a partir do nome do documento da docConfig
+    const nomeDoc = (item.docConfig.nomeDocumento ?? "").toLowerCase();
+    if (nomeDoc.includes("fatura") || nomeDoc.includes("cartao") || nomeDoc.includes("cartão")) {
+      campos.tipoContrato = "cartao";
+    } else if (nomeDoc.includes("extrato") || nomeDoc.includes("cheque") || nomeDoc.includes(" ce ") || nomeDoc.endsWith(" ce") || nomeDoc.startsWith("ce ")) {
+      campos.tipoContrato = "cheque";
+    } else {
+      campos.tipoContrato = "emprestimo";
+    }
+    console.log(`[Extractor] tipoContrato inferido para "${item.docConfig.nomeDocumento}": ${campos.tipoContrato}`);
 
     // Se dadoPlanilha02 não foi extraído mas há um campo marcado como identificaContrato,
     // usar o número do contrato do nome do arquivo como fallback

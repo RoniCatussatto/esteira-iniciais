@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, Package } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, Package, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 export default function GerarPlanilhasPage() {
@@ -148,7 +148,7 @@ export default function GerarPlanilhasPage() {
               <p className="font-medium text-blue-800 mb-1">Para gerar as planilhas no Windows:</p>
               <ol className="list-decimal list-inside space-y-1 text-blue-700">
                 <li>Extraia o ZIP em uma pasta</li>
-                <li>Abra o terminal nessa pasta e execute: <code className="bg-blue-100 px-1 rounded">npm install xlsx</code></li>
+                <li>Abra o terminal nessa pasta e execute: <code className="bg-blue-100 px-1 rounded">npm install adm-zip</code></li>
                 <li>Execute: <code className="bg-blue-100 px-1 rounded">node gerar.js</code></li>
                 <li>As planilhas serão salvas na pasta <code className="bg-blue-100 px-1 rounded">saida/</code></li>
               </ol>
@@ -204,6 +204,17 @@ export default function GerarPlanilhasPage() {
               <CheckCircle2 className="w-4 h-4" />
               Pacote baixado com sucesso! Verifique sua pasta de downloads.
             </div>
+          )}
+          {concluido && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => navigate(`/lote/${loteId}/upload-planilhas-pdf`)}
+            >
+              Próximo passo: Upload dos PDFs revisados
+              <ArrowRight className="w-4 h-4" />
+            </Button>
           )}
         </div>
 

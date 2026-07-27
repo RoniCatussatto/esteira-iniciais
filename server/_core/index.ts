@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { uploadRouter } from "../upload";
 import { scheduledRouter } from "../scheduledJobs";
 import { uploadDocsRouter } from "../uploadDocs";
+import { uploadPlanilhasPdfRouter } from "../uploadPlanilhasPdf";
 import docConfigChatRouter from "../docConfigChat";
 import { gerarPacoteRouter } from "../gerarPacote";
 function isPortAvailable(port: number): Promise<boolean> {
@@ -41,6 +42,7 @@ async function startServer() {
   // Upload routes (multipart/form-data)
   app.use("/api/upload", uploadRouter);
   app.use("/api/upload/docs", uploadDocsRouter);
+  app.use("/api/upload-planilhas-pdf", uploadPlanilhasPdfRouter);
   app.use("/api/doc-config-chat", docConfigChatRouter);
   // Gerar pacote ZIP para download local
   app.use("/api/gerar-pacote", gerarPacoteRouter);

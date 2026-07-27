@@ -348,6 +348,15 @@ export async function getDadosPeticoes(loteId: number): Promise<DadosPeticaoDeve
     const extracaoEmprestimo = extracoesDev.find(e => e.tipoContrato === 'emprestimo') ?? extracoesDev[0] ?? null;
     if (valoresPlaceholders.hasOwnProperty('VENC_INICIAL')) valoresPlaceholders['VENC_INICIAL'] = extracaoEmprestimo?.dadoPlanilha02 ?? '';
     if (valoresPlaceholders.hasOwnProperty('VENC_FINAL')) valoresPlaceholders['VENC_FINAL'] = extracaoEmprestimo?.dadoPlanilha03 ?? '';
+    // Placeholders específicos de Cartão (tipoContrato = 'cartao')
+    const extracaoCartao = extracoesDev.find(e => e.tipoContrato === 'cartao') ?? null;
+    if (valoresPlaceholders.hasOwnProperty('dadoPlanilha01_Cartao')) valoresPlaceholders['dadoPlanilha01_Cartao'] = extracaoCartao?.dadoPlanilha01 ?? '';
+    if (valoresPlaceholders.hasOwnProperty('dadoPlanilha02_Cartao')) valoresPlaceholders['dadoPlanilha02_Cartao'] = extracaoCartao?.dadoPlanilha02 ?? '';
+    if (valoresPlaceholders.hasOwnProperty('dadoPlanilha03_Cartao')) valoresPlaceholders['dadoPlanilha03_Cartao'] = extracaoCartao?.dadoPlanilha03 ?? '';
+    // Placeholders específicos de Cheque Especial/CE (tipoContrato = 'cheque')
+    const extracaoCE = extracoesDev.find(e => e.tipoContrato === 'cheque') ?? null;
+    if (valoresPlaceholders.hasOwnProperty('dadoPlanilha01_CE')) valoresPlaceholders['dadoPlanilha01_CE'] = extracaoCE?.dadoPlanilha01 ?? '';
+    if (valoresPlaceholders.hasOwnProperty('dadoPlanilha02_CE')) valoresPlaceholders['dadoPlanilha02_CE'] = extracaoCE?.dadoPlanilha02 ?? '';
     if (valoresPlaceholders.hasOwnProperty('VALOR')) valoresPlaceholders['VALOR'] = dev.valorBordero ?? '';
     if (valoresPlaceholders.hasOwnProperty('VEICULO')) valoresPlaceholders['VEICULO'] = dev.veiculoModelo ?? '';
     if (valoresPlaceholders.hasOwnProperty('PLACA')) valoresPlaceholders['PLACA'] = dev.veiculoPlaca ?? '';

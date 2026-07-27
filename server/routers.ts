@@ -498,7 +498,7 @@ export const appRouter = router({
     upload: publicProcedure
       .input(z.object({
         categoriaPlanilha: z.string().min(1),
-        qtdContratos: z.number().int().min(1).max(20),
+        qtdContratos: z.number().int().min(1).max(30),
         nomeArquivo: z.string(),
         tamanho: z.number().optional(),
         fileBase64: z.string(),

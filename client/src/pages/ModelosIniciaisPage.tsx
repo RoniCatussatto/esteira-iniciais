@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import {
   ArrowLeft, Upload, FileText, Pencil, Trash2, Check, X,
   Loader2, BookOpen, ChevronDown,
 } from "lucide-react";
+import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -215,66 +216,106 @@ function ModeloRow({
 }
 
 // ── Formulário de upload ─────────────────────────────────────────────────────
+type DocxItem = {
+  file: File;
+  nome: string;
+  categoria: string;
+  status: "pending" | "uploading" | "done" | "error";
+  error?: string;
+};
+
+function fileToBase64(file: File): Promise<string> {
+  return file.arrayBuffer().then((buf) => {
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  });
+}
+
+// ── Formulário de upload (múltiplos arquivos) ────────────────────────────────
 function UploadForm({ onUploaded }: { onUploaded: () => void }) {
-  const [nome, setNome] = useState("");
-  const [categoria, setCategoria] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
+  const [items, setItems] = useState<DocxItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadMut = trpc.modelosIniciais.upload.useMutation();
 
-  const uploadMut = trpc.modelosIniciais.upload.useMutation({
-    onSuccess: (result) => {
-      const msg = result.replaced
-        ? `Modelo "${nome}" substituído com sucesso.`
-        : `Modelo "${nome}" adicionado com sucesso.`;
-      toast.success(msg);
-      setNome("");
-      setCategoria("");
-      setFile(null);
-      if (fileRef.current) fileRef.current.value = "";
-      onUploaded();
-    },
-    onError: (e) => toast.error("Erro no upload: " + e.message),
-    onSettled: () => setUploading(false),
-  });
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const arr = Array.from(files);
+    const novos: DocxItem[] = arr
+      .filter((f) => f.name.toLowerCase().endsWith(".docx"))
+      .map((f) => ({
+        file: f,
+        nome: f.name.replace(/\.docx$/i, ""),
+        categoria: "",
+        status: "pending" as const,
+      }));
+    const ignorados = arr.length - novos.length;
+    if (ignorados > 0) toast.warning(`${ignorados} arquivo(s) ignorado(s) — apenas .docx é aceito.`);
+    setItems((prev) => {
+      const existentes = new Set(prev.map((i) => i.file.name));
+      return [...prev, ...novos.filter((n) => !existentes.has(n.file.name))];
+    });
+  }, []);
 
-  const handleFile = (f: File) => {
-    if (!f.name.toLowerCase().endsWith(".docx")) {
-      toast.error("Apenas arquivos .docx são aceitos.");
-      return;
-    }
-    setFile(f);
-    // Pré-preenche o nome com o nome do arquivo sem extensão
-    if (!nome) {
-      setNome(f.name.replace(/\.docx$/i, ""));
-    }
+  const removeItem = (idx: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
   };
+
+  const updateItem = (idx: number, patch: Partial<DocxItem>) => {
+    setItems((prev) => prev.map((item, i) => i === idx ? { ...item, ...patch } : item));
+  };
+
+  const pendentes = items.filter((i) => i.status === "pending");
+  const prontos = pendentes.filter((i) => i.nome.trim() && i.categoria);
 
   const handleSubmit = async () => {
-    if (!nome.trim() || !categoria || !file) return;
+    if (prontos.length === 0) return;
     setUploading(true);
-    const arrayBuffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-    uploadMut.mutate({
-      nome: nome.trim(),
-      categoriaPlanilha: categoria,
-      nomeArquivo: file.name,
-      tamanho: file.size,
-      fileBase64: base64,
-    });
+    let sucesso = 0;
+    let falha = 0;
+    for (const item of prontos) {
+      setItems((prev) =>
+        prev.map((i) => i.file.name === item.file.name ? { ...i, status: "uploading" } : i)
+      );
+      try {
+        const base64 = await fileToBase64(item.file);
+        await uploadMut.mutateAsync({
+          nome: item.nome.trim(),
+          categoriaPlanilha: item.categoria,
+          nomeArquivo: item.file.name,
+          tamanho: item.file.size,
+          fileBase64: base64,
+        });
+        setItems((prev) =>
+          prev.map((i) => i.file.name === item.file.name ? { ...i, status: "done" } : i)
+        );
+        sucesso++;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erro desconhecido";
+        setItems((prev) =>
+          prev.map((i) => i.file.name === item.file.name ? { ...i, status: "error", error: msg } : i)
+        );
+        falha++;
+      }
+    }
+    setUploading(false);
+    if (sucesso > 0) {
+      toast.success(`${sucesso} modelo(s) enviado(s) com sucesso.`);
+      onUploaded();
+    }
+    if (falha > 0) toast.error(`${falha} modelo(s) falharam.`);
+    setTimeout(() => {
+      setItems((prev) => prev.filter((i) => i.status !== "done"));
+    }, 2000);
   };
-
-  const canSubmit = nome.trim().length > 0 && categoria.length > 0 && file !== null && !uploading;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
       <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
         <Upload className="w-4 h-4 text-blue-500" />
-        Adicionar / Substituir Modelo
+        Adicionar / Substituir Modelos
       </h2>
 
       {/* Drop zone */}
@@ -288,69 +329,145 @@ function UploadForm({ onUploaded }: { onUploaded: () => void }) {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          const f = e.dataTransfer.files[0];
-          if (f) handleFile(f);
+          addFiles(e.dataTransfer.files);
         }}
       >
         <input
           ref={fileRef}
           type="file"
           accept=".docx"
+          multiple
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          onChange={(e) => { if (e.target.files) addFiles(e.target.files); }}
         />
-        {file ? (
-          <div className="flex items-center justify-center gap-2 text-sm text-blue-700">
-            <FileText className="w-5 h-5" />
-            <span className="font-medium">{file.name}</span>
-            <span className="text-gray-400">({formatBytes(file.size)})</span>
-          </div>
-        ) : (
-          <div className="text-gray-400 space-y-1">
-            <Upload className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">Clique ou arraste o arquivo <strong>.docx</strong> aqui</p>
-          </div>
-        )}
+        <Upload className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+        <p className="text-sm text-gray-400">
+          Clique ou arraste <strong>um ou vários arquivos .docx</strong> aqui
+        </p>
       </div>
 
-      {/* Nome e categoria */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-600">Nome do modelo <span className="text-red-500">*</span></label>
-          <Input
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            placeholder="Ex: CAC, COB CCB, EXEC CONFISSAO"
-            className="h-9 text-sm"
-          />
-          <p className="text-xs text-gray-400">Deve ser único. Se já existir, o arquivo será substituído.</p>
+      {/* Lista de arquivos com campos editáveis */}
+      {items.length > 0 && (
+        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+          {items.map((item, idx) => (
+            <div
+              key={item.file.name}
+              className={`rounded-lg border p-3 space-y-2 ${
+                item.status === "done" ? "bg-green-50 border-green-200" :
+                item.status === "error" ? "bg-red-50 border-red-200" :
+                item.status === "uploading" ? "bg-blue-50 border-blue-200" :
+                "bg-gray-50 border-gray-200"
+              }`}
+            >
+              {/* Cabeçalho do item */}
+              <div className="flex items-center gap-2">
+                {item.status === "done" ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                ) : item.status === "error" ? (
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                ) : item.status === "uploading" ? (
+                  <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />
+                ) : (
+                  <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                )}
+                <span className="text-xs text-gray-500 truncate flex-1">{item.file.name}</span>
+                <span className="text-xs text-gray-400 shrink-0">{formatBytes(item.file.size)}</span>
+                {item.status === "pending" && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeItem(idx); }}
+                    className="text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {/* Campos editáveis (só quando pendente) */}
+              {item.status === "pending" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">
+                      Nome do modelo <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      value={item.nome}
+                      onChange={(e) => updateItem(idx, { nome: e.target.value })}
+                      placeholder="Ex: CAC, COB CCB"
+                      className="h-8 text-xs"
+                      disabled={uploading}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">
+                      Categoria <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={item.categoria}
+                      onValueChange={(v) => updateItem(idx, { categoria: v })}
+                      disabled={uploading}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIAS.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              {/* Mensagem de erro */}
+              {item.status === "error" && item.error && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {item.error}
+                </p>
+              )}
+              {/* Resumo quando concluído */}
+              {item.status === "done" && (
+                <p className="text-xs text-green-700 font-medium">
+                  ✓ {item.nome} — {item.categoria}
+                </p>
+              )}
+            </div>
+          ))}
         </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-600">Categoria de planilha <span className="text-red-500">*</span></label>
-          <Select value={categoria} onValueChange={setCategoria}>
-            <SelectTrigger className="h-9 text-sm">
-              <SelectValue placeholder="Selecione a categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIAS.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      )}
 
-      <Button
-        onClick={handleSubmit}
-        disabled={!canSubmit}
-        className="w-full"
-      >
-        {uploading ? (
-          <><Loader2 className="w-4 h-4 animate-spin mr-2" />Enviando...</>
-        ) : (
-          <><Upload className="w-4 h-4 mr-2" />Enviar Modelo</>
+      {/* Aviso sobre itens sem categoria */}
+      {pendentes.length > 0 && prontos.length < pendentes.length && (
+        <p className="text-xs text-amber-600 flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5" />
+          {pendentes.length - prontos.length} arquivo(s) sem nome ou categoria — preencha antes de enviar.
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        {items.length > 0 && !uploading && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setItems([])}
+            className="text-gray-500"
+          >
+            Limpar lista
+          </Button>
         )}
-      </Button>
+        <Button
+          onClick={handleSubmit}
+          disabled={prontos.length === 0 || uploading}
+          className="flex-1"
+        >
+          {uploading ? (
+            <><Loader2 className="w-4 h-4 animate-spin mr-2" />Enviando...</>
+          ) : (
+            <><Upload className="w-4 h-4 mr-2" />
+              Enviar {prontos.length > 0 ? `${prontos.length} modelo${prontos.length !== 1 ? "s" : ""}` : "Modelos"}
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

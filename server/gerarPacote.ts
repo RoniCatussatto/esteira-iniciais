@@ -366,6 +366,32 @@ gerarPacoteRouter.get("/:loteId", async (req, res) => {
     zip.addFile("dados.json", Buffer.from(dadosJson, "utf8"));
     zip.addFile("gerar.js", Buffer.from(gerarJs, "utf8"));
     zip.addFile("README.txt", Buffer.from(readme, "utf8"));
+    // Gerar.bat — execução com duplo clique no Windows
+    const gerarBat = [
+      "@echo off",
+      "chcp 65001 > nul",
+      "echo ============================================",
+      "echo  Gerando planilhas de calculo...",
+      "echo ============================================",
+      "echo.",
+      "where node >nul 2>&1",
+      "if %errorlevel% neq 0 (",
+      "  echo ERRO: Node.js nao encontrado.",
+      "  echo Instale em: https://nodejs.org",
+      "  pause",
+      "  exit /b 1",
+      ")",
+      "if not exist node_modules\\adm-zip (",
+      "  echo Instalando dependencias...",
+      "  npm install adm-zip",
+      "  echo.",
+      ")",
+      "node gerar.js",
+      "echo.",
+      "echo Concluido! As planilhas foram salvas na pasta saida\\",
+      "pause",
+    ].join("\r\n");
+    zip.addFile("Gerar.bat", Buffer.from(gerarBat, "utf8"));
 
     // Adicionar modelos .xlsx
     for (const [key, buf] of Array.from(modelosBuffers.entries())) {

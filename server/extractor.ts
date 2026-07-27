@@ -751,7 +751,7 @@ async function _finalizarExtracaoItem(
     const nomeDoc = (item.docConfig.nomeDocumento ?? "").toLowerCase();
     if (nomeDoc.includes("fatura") || nomeDoc.includes("cartao") || nomeDoc.includes("cartão")) {
       campos.tipoContrato = "cartao";
-    } else if (nomeDoc.includes("extrato") || nomeDoc.includes("cheque") || nomeDoc.includes(" ce ") || nomeDoc.endsWith(" ce") || nomeDoc.startsWith("ce ")) {
+    } else if (nomeDoc.includes("cheque") || nomeDoc.includes(" ce ") || nomeDoc.endsWith(" ce") || nomeDoc.startsWith("ce ")) {
       campos.tipoContrato = "cheque";
     } else {
       campos.tipoContrato = "emprestimo";

@@ -82,6 +82,15 @@ const PLACEHOLDERS_GRANDES = ["PARAGRAFO_INICIAL", "ENDERECO_COOP", "DEVEDOR_END
 // Placeholders que NÃO devem ser exibidos na revisão (serão preenchidos manualmente pelo usuário no Word)
 const PLACEHOLDERS_OCULTOS = ["PLANILHA"];
 
+/** Nomes amigáveis para placeholders com nomenclatura técnica */
+const PLACEHOLDER_LABELS: Record<string, string> = {
+  'dadoPlanilha01_Cartao': 'Conta-Cartão',
+  'dadoPlanilha02_Cartao': 'Extrato de Cartão',
+  'dadoPlanilha03_Cartao': 'Venc. Cartão',
+  'dadoPlanilha01_CE': 'Instrumento CE',
+  'dadoPlanilha02_CE': 'Conta Corrente CE',
+};
+
 export default function GerarPeticoesPage() {
   const { id } = useParams<{ id: string }>();
   const loteId = parseInt(id ?? "0");
@@ -431,7 +440,7 @@ export default function GerarPeticoesPage() {
                       return (
                         <div key={ph} className={isGrande ? "sm:col-span-2" : ""}>
                           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                            {ph.replace(/_/g, ' ')}
+                            {PLACEHOLDER_LABELS[ph] ?? ph.replace(/_/g, ' ')}
                           </label>
                           {isGrande ? (
                             <Textarea

@@ -67,6 +67,7 @@ import {
   deleteModeloCalculo,
 } from "./db";
 import { storagePut } from "./storage";
+import { getDadosPeticoes, gerarPeticoes } from "./gerarPeticoes";
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -521,6 +522,31 @@ export const appRouter = router({
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => deleteModeloCalculo(input.id)),
+  }),
+
+  peticoes: router({
+    getDados: publicProcedure
+      .input(z.object({ loteId: z.number() }))
+      .query(({ input }) => getDadosPeticoes(input.loteId as number)),
+
+    gerar: publicProcedure
+      .input(z.object({
+        loteId: z.number(),
+        dadosPorDevedor: z.array(z.object({
+          devedorId: z.number(),
+          modeloInicial: z.string(),
+          cooperativa: z.string(),
+          contrarioNome: z.string(),
+          valoresPlaceholders: z.record(z.string(), z.string()),
+        })),
+      }))
+      .mutation(({ input }) => gerarPeticoes({
+        loteId: input.loteId,
+        dadosPorDevedor: input.dadosPorDevedor.map(d => ({
+          ...d,
+          valoresPlaceholders: d.valoresPlaceholders as Record<string, string>,
+        })),
+      })),
   }),
 
 });

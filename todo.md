@@ -113,3 +113,23 @@
 - [x] Índice pré-preenchido automaticamente: cartão/cheque especial → Selic, demais → IPCA
 - [x] Salvar automaticamente ao alterar índice (toggle) e botão Salvar por devedor para o modelo
 - [x] Registrar rota /lote/:id/definir-inicial no App.tsx
+
+## Etapa Gerar Planilhas (/lote/:id/gerar-planilhas)
+- [x] Endpoint /api/gerar-pacote/:loteId que monta ZIP com dados calculados + modelos + script gerar.js
+- [x] GerarPlanilhasPage com botão de download e instruções
+- [x] Botão "Próximo passo" navega para UploadPlanilhasPdfPage
+
+## Etapa Upload PDFs das Planilhas (/lote/:id/upload-planilhas-pdf)
+- [x] UploadPlanilhasPdfPage com drag-and-drop de PDFs
+- [x] Extração do Total Geral (maior valor monetário) via pdftotext
+- [x] Identificação automática do devedor pelo nome do arquivo
+- [x] Campos editáveis para revisão/correção do valor extraído
+- [x] Salva valorCausa no banco (tabela devedores)
+- [ ] Botão "Próximo passo" navega para GerarPeticoesPage
+
+## Etapa Gerar Petições (/lote/:id/gerar-peticoes)
+- [x] Backend server/gerarPeticoes.ts: extrairPlaceholders, getDadosPeticoes, gerarPeticoes
+- [x] Procedures tRPC: peticoes.getDados, peticoes.gerar
+- [x] GerarPeticoesPage: carrossel com dados cliente / devedor / tabela contratos / campos placeholders
+- [x] Rota /lote/:id/gerar-peticoes no App.tsx
+- [x] Botão "Próximo passo" na UploadPlanilhasPdfPage → GerarPeticoesPage

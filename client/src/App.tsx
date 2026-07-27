@@ -16,6 +16,7 @@ import ModelosCalculoPage from "./pages/ModelosCalculoPage";
 import ModelosIniciaisPage from "./pages/ModelosIniciaisPage";
 import GerarPlanilhasPage from "./pages/GerarPlanilhasPage";
 import UploadPlanilhasPdfPage from "./pages/UploadPlanilhasPdfPage";
+import GerarPeticoesPage from "./pages/GerarPeticoesPage";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -32,6 +33,7 @@ function Router() {
       <Route path={"/modelos-calculo"} component={ModelosCalculoPage} />
       <Route path={"/lote/:id/gerar-planilhas"} component={GerarPlanilhasPage} />
       <Route path={"/lote/:id/upload-planilhas-pdf"} component={UploadPlanilhasPdfPage} />
+      <Route path={"/lote/:id/gerar-peticoes"} component={GerarPeticoesPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

@@ -373,7 +373,7 @@ export default function UploadPlanilhasPdfPage() {
                     variant="outline"
                     size="sm"
                     className="gap-2 text-green-700 border-green-300 hover:bg-green-50"
-                    onClick={() => toast.info("A etapa de geração de petições será implementada em breve.")}
+                    onClick={() => navigate(`/lote/${loteId}/gerar-peticoes`)}
                   >
                     Próximo passo
                     <ArrowRight className="w-4 h-4" />

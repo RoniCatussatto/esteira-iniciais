@@ -24,7 +24,9 @@ export const uploadPlanilhasPdfRouter = Router();
 
 /**
  * Extrai o valor do Total Geral de um PDF de planilha de cálculo.
- * Busca pelo último "Total Geral" no texto e pega o primeiro "R$ X.XXX,XX" após ele.
+ * Estratégia: o valor do Total Geral aparece DUAS VEZES no PDF (linha "Débito" e linha "Total Geral").
+ * Busca o valor monetário que se repete — esse é sempre o Total Geral.
+ * Fallback: busca pelo último "Total Geral" e pega o primeiro valor após ele.
  * Retorna o valor em formato BR (ex: "12.148,74") ou null se não encontrar.
  */
 function extrairTotalGeral(pdfBuffer: Buffer): string | null {
@@ -32,16 +34,35 @@ function extrairTotalGeral(pdfBuffer: Buffer): string | null {
   try {
     writeFileSync(tmpPath, pdfBuffer);
     const text = execSync(`pdftotext ${JSON.stringify(tmpPath)} -`, { encoding: "utf8", timeout: 15000 });
+
+    // Extrair todos os valores monetários do texto
+    const todosValores = Array.from(text.matchAll(/R\$\s*([\d,\.]+)/g)).map(m => m[1]);
+
+    // Estratégia 1: encontrar o valor que aparece duas vezes (Débito = Total Geral)
+    const contagem = new Map<string, number>();
+    for (const v of todosValores) {
+      const norm = normalizarValorBR(v);
+      contagem.set(norm, (contagem.get(norm) ?? 0) + 1);
+    }
+    // Filtrar valores que aparecem >= 2 vezes, pegar o maior (Total Geral pode ter duplicatas menores)
+    const repetidos = Array.from(contagem.entries())
+      .filter(([, cnt]) => cnt >= 2)
+      .map(([val]) => val);
+
+    if (repetidos.length > 0) {
+      // Converter para número para pegar o maior valor repetido
+      const parseValor = (v: string) => parseFloat(v.replace(/\./g, "").replace(",", "."));
+      repetidos.sort((a, b) => parseValor(b) - parseValor(a));
+      return repetidos[0];
+    }
+
+    // Fallback: busca pelo último "Total Geral" e pega o primeiro valor após ele
     const idx = text.lastIndexOf("Total Geral");
     if (idx < 0) return null;
     const after = text.slice(idx);
-    // Pegar o primeiro valor monetário após "Total Geral"
     const m = after.match(/R\$\s*([\d,\.]+)/);
     if (!m) return null;
-    // O pdftotext do LibreOffice pode gerar formato US (12,148.74) ou BR (12.148,74)
-    // Normalizar para formato BR com vírgula decimal
-    const raw = m[1]; // ex: "12,148.74" (US) ou "12.148,74" (BR)
-    return normalizarValorBR(raw);
+    return normalizarValorBR(m[1]);
   } catch {
     return null;
   } finally {

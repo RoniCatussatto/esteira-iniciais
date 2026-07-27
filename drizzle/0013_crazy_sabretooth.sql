@@ -1,0 +1,1 @@
+ALTER TABLE `extracoes` ADD `tipoContrato` enum('emprestimo','cheque','cartao') DEFAULT 'emprestimo';

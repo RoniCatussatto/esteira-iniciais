@@ -127,6 +127,8 @@ export const extracoes = mysqlTable("extracoes", {
   moraEspecifica: text("moraEspecifica"),
   // Índice de correção monetária para este contrato (definido na etapa Definir Inicial)
   indiceCorrecao: mysqlEnum("indiceCorrecao", ["ipca", "selic"]).default("ipca"),
+  // Tipo do contrato: emprestimo (padrão), cheque (cheque especial/CE), cartao
+  tipoContrato: mysqlEnum("tipoContrato", ["emprestimo", "cheque", "cartao"]).default("emprestimo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

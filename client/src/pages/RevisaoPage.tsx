@@ -42,6 +42,7 @@ type Extracao = {
   dadoPlanilha03: string | null; dadoPlanilha04: string | null;
   multa2pct: "sim" | "nao" | "branco" | null;
   moraEspecifica: string | null;
+  tipoContrato: "emprestimo" | "cheque" | "cartao" | null;
 };
 
 type Documento = {
@@ -72,6 +73,7 @@ function ExtracaoCard({
     dadoPlanilha04: ex.dadoPlanilha04 ?? "",
     multa2pct: (ex.multa2pct ?? "branco") as "sim" | "nao" | "branco",
     moraEspecifica: ex.moraEspecifica ?? "",
+    tipoContrato: (ex.tipoContrato ?? "emprestimo") as "emprestimo" | "cheque" | "cartao",
   });
 
   const updateMut = trpc.extracoes.update.useMutation({
@@ -94,6 +96,7 @@ function ExtracaoCard({
       dadoPlanilha04: fields.dadoPlanilha04 || null,
       multa2pct: fields.multa2pct,
       moraEspecifica: fields.moraEspecifica || null,
+      tipoContrato: fields.tipoContrato,
     });
     setSaving(false);
   }
@@ -165,6 +168,17 @@ function ExtracaoCard({
             placeholder="Preencher apenas quando aplicável"
             className="h-8 text-sm"
           />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Tipo de Contrato</Label>
+          <Select value={fields.tipoContrato} onValueChange={(v) => setFields(f => ({ ...f, tipoContrato: v as "emprestimo"|"cheque"|"cartao" }))}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="emprestimo">Empréstimo</SelectItem>
+              <SelectItem value="cheque">Cheque Especial (CE)</SelectItem>
+              <SelectItem value="cartao">Cartão</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

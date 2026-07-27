@@ -287,6 +287,7 @@ export const appRouter = router({
         dadoPlanilha04: z.string().nullable().optional(),
         multa2pct: z.enum(["sim", "nao", "branco"]).optional(),
         moraEspecifica: z.string().nullable().optional(),
+        tipoContrato: z.enum(["emprestimo", "cheque", "cartao"]).optional(),
       }))
       .mutation(({ input }) => createExtracao(input)),
     update: publicProcedure
@@ -299,6 +300,7 @@ export const appRouter = router({
         dadoPlanilha04: z.string().nullable().optional(),
         multa2pct: z.enum(["sim", "nao", "branco"]).optional(),
         moraEspecifica: z.string().nullable().optional(),
+        tipoContrato: z.enum(["emprestimo", "cheque", "cartao"]).optional(),
       }))
       .mutation(({ input }) => {
         const { id, ...data } = input;

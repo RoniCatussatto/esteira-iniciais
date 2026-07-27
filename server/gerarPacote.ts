@@ -66,7 +66,12 @@ function contarMeses(mesAno1: string, mesAno2: string): number {
 }
 
 /** Determina o tipo de contrato a partir dos dados da extração */
-function tipoContrato(extracao: { moraEspecifica?: string | null; dadoPlanilha01?: string | null }): "cartao" | "cheque" | "emprestimo" {
+function tipoContrato(extracao: { moraEspecifica?: string | null; dadoPlanilha01?: string | null; tipoContrato?: string | null }): "cartao" | "cheque" | "emprestimo" {
+  // Usar o tipo explícito do banco quando for cheque ou cartao (não emprestimo, que é o default)
+  // O valor "emprestimo" pode ser apenas o default do banco, não uma escolha explícita do usuário
+  if (extracao.tipoContrato === "cartao") return "cartao";
+  if (extracao.tipoContrato === "cheque") return "cheque";
+  // Fallback: inferir pelo moraEspecifica e dadoPlanilha01
   if (extracao.moraEspecifica && extracao.moraEspecifica.trim() !== "") return "cartao";
   if (!extracao.dadoPlanilha01 || extracao.dadoPlanilha01.trim() === "") return "cheque";
   return "emprestimo";
@@ -75,7 +80,7 @@ function tipoContrato(extracao: { moraEspecifica?: string | null; dadoPlanilha01
 /** Determina a categoria da planilha com base nos tipos de contrato do devedor */
 function determinarCategoria(
   modeloInicial: string,
-  extracoes: Array<{ moraEspecifica?: string | null; dadoPlanilha01?: string | null; indiceCorrecao?: string | null }>
+  extracoes: Array<{ moraEspecifica?: string | null; dadoPlanilha01?: string | null; indiceCorrecao?: string | null; tipoContrato?: string | null }>
 ): string {
   const tipos = extracoes.map(tipoContrato);
   const temCartao = tipos.includes("cartao");
@@ -510,6 +515,12 @@ function gerarXlsx(modeloPath, saidaPath, devedor, AdmZip) {
     '{honorarios}': devedor.honorarios ?? '0',
   };
 
+  // Capturar índice de {honorarios} ANTES da substituição para converter para numérico depois
+  const idxHonorariosOriginal = ssMapNovo.indexOf('{honorarios}');
+  const honorariosNum = parseFloat((devedor.honorarios ?? '0').replace(',', '.'));
+  const honorariosIsNum = !isNaN(honorariosNum);
+  const honorariosVal = honorariosIsNum ? String(honorariosNum) : null;
+
   let ssXmlNovo = ssXml;
   for (const [ph, val] of Object.entries(globalSubs)) {
     const valXml = escapeXml(val);
@@ -554,8 +565,9 @@ function gerarXlsx(modeloPath, saidaPath, devedor, AdmZip) {
     const dp03Idx = baseIdx + novosStrings.length; novosStrings.push(c.dadoPlanilha03 ?? '');
     // dp04 = saldo devedor/débito: tentar converter para numérico (trocar vírgula por ponto)
     const dp04Raw = c.dadoPlanilha04 ?? '';
-    // Formato BR: 1.234,56 → 1234.56 (remover pontos de milhar, trocar vírgula decimal por ponto)
-    const dp04Num = parseFloat(dp04Raw.replace(/\\.(?=\\d{3}[,.])/g, '').replace(',', '.'));
+    // Normalizar: remover R$, espaços, pontos de milhar; trocar vírgula decimal por ponto
+    const dp04Clean = dp04Raw.replace(/R\\$\\s*/g, '').replace(/\\.(?=\\d{3}[,.])/g, '').replace(',', '.').trim();
+    const dp04Num = parseFloat(dp04Clean);
     const dp04IsNum = !isNaN(dp04Num) && dp04Raw.trim() !== '';
     const dp04Idx = baseIdx + novosStrings.length;
     if (!dp04IsNum) novosStrings.push(dp04Raw); // só adiciona como string se não for número
@@ -669,6 +681,17 @@ function gerarXlsx(modeloPath, saidaPath, devedor, AdmZip) {
 
   zip.updateFile('xl/sharedStrings.xml', Buffer.from(ssXmlNovo, 'utf8'));
   zip.updateFile('xl/worksheets/sheet1.xml', Buffer.from(sheetXml, 'utf8'));
+
+  // Converter célula de honorários para numérico (evitar "clicar duas vezes")
+  if (idxHonorariosOriginal >= 0 && honorariosIsNum && honorariosVal !== null) {
+    let sheetXml2 = zip.readAsText('xl/worksheets/sheet1.xml');
+    sheetXml2 = sheetXml2.replace(
+      new RegExp('<c((?:[^>]*?)\\\\s)t="s"([^>]*)><v>' + idxHonorariosOriginal + '<\\\\/v><\\\\/c>'),
+      (m, pre, post) => '<c' + pre.trimEnd() + post + '><v>' + honorariosVal + '</v></c>'
+    );
+    zip.updateFile('xl/worksheets/sheet1.xml', Buffer.from(sheetXml2, 'utf8'));
+  }
+
 
   // Forçar recálculo completo ao abrir o arquivo
   let wbXml = zip.readAsText('xl/workbook.xml');

@@ -92,6 +92,13 @@
       "when": 1785101580201,
       "tag": "0012_green_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1785120999721,
+      "tag": "0013_crazy_sabretooth",
+      "breakpoints": true
     }
   ]
 }

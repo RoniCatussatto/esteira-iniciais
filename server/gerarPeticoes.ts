@@ -73,8 +73,94 @@ function formatarContratos(contratos: string | null | undefined): string {
   return partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
 }
 
+/** Mapa de estados brasileiros: sigla → nome por extenso com artigo */
+const ESTADOS_BR: Record<string, string> = {
+  AC: 'DO ACRE', AL: 'DE ALAGOAS', AP: 'DO AMAPÁ', AM: 'DO AMAZONAS',
+  BA: 'DA BAHIA', CE: 'DO CEARÁ', DF: 'DO DISTRITO FEDERAL', ES: 'DO ESPÍRITO SANTO',
+  GO: 'DE GOIÁS', MA: 'DO MARANHÃO', MT: 'DE MATO GROSSO', MS: 'DE MATO GROSSO DO SUL',
+  MG: 'DE MINAS GERAIS', PA: 'DO PARÁ', PB: 'DA PARAÍBA', PR: 'DO PARANÁ',
+  PE: 'DE PERNAMBUCO', PI: 'DO PIAUÍ', RJ: 'DO RIO DE JANEIRO', RN: 'DO RIO GRANDE DO NORTE',
+  RS: 'DO RIO GRANDE DO SUL', RO: 'DE RONDÔNIA', RR: 'DE RORAIMA', SC: 'DE SANTA CATARINA',
+  SP: 'DE SÃO PAULO', SE: 'DE SERGIPE', TO: 'DO TOCANTINS',
+};
+
+/** Mapa cidade → sigla do estado para capitais e cidades mais comuns */
+const CIDADE_ESTADO: Record<string, string> = {
+  'MANAUS': 'AM', 'BELO HORIZONTE': 'MG', 'CURITIBA': 'PR', 'FORTALEZA': 'CE',
+  'RECIFE': 'PE', 'PORTO ALEGRE': 'RS', 'SALVADOR': 'BA', 'BELÉM': 'PA',
+  'GOIÂNIA': 'GO', 'FLORIANÓPOLIS': 'SC', 'SÃO LUÍS': 'MA', 'MACEIÓ': 'AL',
+  'NATAL': 'RN', 'TERESINA': 'PI', 'CAMPO GRANDE': 'MS', 'JOÃO PESSOA': 'PB',
+  'ARACAJU': 'SE', 'CUIABÁ': 'MT', 'MACAPÁ': 'AP', 'PORTO VELHO': 'RO',
+  'BOA VISTA': 'RR', 'PALMAS': 'TO', 'RIO BRANCO': 'AC', 'VITÓRIA': 'ES',
+  'RIO DE JANEIRO': 'RJ', 'SÃO PAULO': 'SP', 'BRASÍLIA': 'DF',
+  'CAMPINAS': 'SP', 'SANTOS': 'SP', 'RIBEIRÃO PRETO': 'SP', 'SÃO BERNARDO DO CAMPO': 'SP',
+  'OSASCO': 'SP', 'GUARULHOS': 'SP', 'SOROCABA': 'SP', 'SÃO JOSÉ DOS CAMPOS': 'SP',
+  'LONDRINA': 'PR', 'MARINGÁ': 'PR', 'JOINVILLE': 'SC', 'UBERLÂNDIA': 'MG',
+  'CONTAGEM': 'MG', 'JUIZ DE FORA': 'MG', 'NITERÓI': 'RJ', 'DUQUE DE CAXIAS': 'RJ',
+  'NOVA IGUAÇU': 'RJ', 'CARUARU': 'PE', 'FEIRA DE SANTANA': 'BA', 'CAUCAIA': 'CE',
+};
+
+/** Foros regionais da capital de SP */
+const FOROS_REGIONAIS_SP: Record<string, string> = {
+  'CENTRAL': 'CENTRAL',
+  'SANTO AMARO': 'SANTO AMARO',
+  'PINHEIROS': 'PINHEIROS',
+  'SANTANA': 'SANTANA',
+  'N. SRA. DO O': 'NOSSA SENHORA DO Ó',
+  'NOSSA SENHORA DO O': 'NOSSA SENHORA DO Ó',
+  'NOSSA SENHORA DO Ó': 'NOSSA SENHORA DO Ó',
+  'N. SRA. DO Ó': 'NOSSA SENHORA DO Ó',
+  'LAPA': 'LAPA',
+  'BUTANTÃ': 'BUTANTÃ',
+  'BUTANTA': 'BUTANTÃ',
+  'SÃO MIGUEL PAULISTA': 'SÃO MIGUEL PAULISTA',
+  'SAO MIGUEL PAULISTA': 'SÃO MIGUEL PAULISTA',
+  'PENHA': 'PENHA DE FRANÇA',
+  'PENHA DE FRANCA': 'PENHA DE FRANÇA',
+  'PENHA DE FRANÇA': 'PENHA DE FRANÇA',
+  'ITAQUERA': 'ITAQUERA',
+  'TATUAPÉ': 'TATUAPÉ',
+  'TATUAPE': 'TATUAPÉ',
+  'VILA PRUDENTE': 'VILA PRUDENTE',
+  'JABAQUARA': 'JABAQUARA',
+  'IPIRANGA': 'IPIRANGA',
+};
+
+/**
+ * Formata o valor do campo FORO para o formato adequado na petição:
+ * - Foros regionais de SP → "FORO REGIONAL {NOME} - CAPITAL, ESTADO DE SÃO PAULO,"
+ * - Outras cidades → "{CIDADE}, ESTADO {DE/DO/DA} {ESTADO},"
+ */
+export function formatarForo(foro: string | null | undefined): string {
+  if (!foro) return '';
+  const foroUpper = foro.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const foroOriginal = foro.trim().toUpperCase();
+
+  // Verificar se é foro regional de SP (comparação sem acento)
+  for (const [chave, nomeCompleto] of Object.entries(FOROS_REGIONAIS_SP)) {
+    const chaveNorm = chave.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (foroUpper === chaveNorm || foroUpper.includes(chaveNorm)) {
+      return `FORO REGIONAL ${nomeCompleto} - CAPITAL, ESTADO DE SÃO PAULO,`;
+    }
+  }
+
+  // Tentar identificar o estado pela cidade
+  const cidadeNorm = foroOriginal;
+  for (const [cidade, sigla] of Object.entries(CIDADE_ESTADO)) {
+    const cidadeKey = cidade.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (foroUpper === cidadeKey || foroUpper.startsWith(cidadeKey)) {
+      const estadoArtigo = ESTADOS_BR[sigla] ?? `DO ${sigla}`;
+      return `${cidadeNorm}, ESTADO ${estadoArtigo},`;
+    }
+  }
+
+  // Fallback: retornar a cidade como está, sem estado (usuário pode editar)
+  return `${foroOriginal},`;
+}
+
 /** Extrai placeholders {NOME} de um buffer .docx */
 export function extrairPlaceholders(docxBuffer: Buffer): string[] {
+
   try {
     const zip = new PizZip(docxBuffer);
     // Ler o document.xml
@@ -206,7 +292,7 @@ export async function getDadosPeticoes(loteId: number): Promise<DadosPeticaoDeve
       valoresPlaceholders[ph] = '';
     }
     // Pré-preencher com dados conhecidos
-    if (valoresPlaceholders.hasOwnProperty('FORO')) valoresPlaceholders['FORO'] = dev.foro ?? '';
+    if (valoresPlaceholders.hasOwnProperty('FORO')) valoresPlaceholders['FORO'] = formatarForo(dev.foro);
     if (valoresPlaceholders.hasOwnProperty('COOPERATIVA')) valoresPlaceholders['COOPERATIVA'] = dev.cooperativa ?? '';
     if (valoresPlaceholders.hasOwnProperty('NOME_COOP')) valoresPlaceholders['NOME_COOP'] = cliente?.nomeCompleto ?? '';
     if (valoresPlaceholders.hasOwnProperty('DOC_COOP')) valoresPlaceholders['DOC_COOP'] = cliente?.doc ?? '';

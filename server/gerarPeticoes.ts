@@ -126,12 +126,26 @@ const FOROS_REGIONAIS_SP: Record<string, string> = {
   'IPIRANGA': 'IPIRANGA',
 };
 
+
+/**
+ * Extrai a sigla do estado (UF) de um endereço no formato "..., CIDADE/UF - CEP: ..."
+ * Ex: "RUA WASHINGTON LUIZ, 678, IBATÉ/SP - CEP: 14817046" → "SP"
+ */
+export function extrairUFDoEndereco(endereco: string | null | undefined): string | null {
+  if (!endereco) return null;
+  const match = endereco.match(/\/([A-Z]{2})(?:\s*[-\u2013]|\s*$|\s*,)/);
+  if (match) return match[1];
+  const match2 = endereco.match(/\b([A-Z]{2})\s*[-\u2013]\s*CEP/);
+  if (match2) return match2[1];
+  return null;
+}
+
 /**
  * Formata o valor do campo FORO para o formato adequado na petição:
  * - Foros regionais de SP → "FORO REGIONAL {NOME} - CAPITAL, ESTADO DE SÃO PAULO,"
  * - Outras cidades → "{CIDADE}, ESTADO {DE/DO/DA} {ESTADO},"
  */
-export function formatarForo(foro: string | null | undefined): string {
+export function formatarForo(foro: string | null | undefined, enderecoDevedor?: string | null): string {
   if (!foro) return '';
   const foroUpper = foro.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const foroOriginal = foro.trim().toUpperCase();
@@ -144,6 +158,11 @@ export function formatarForo(foro: string | null | undefined): string {
     }
   }
 
+  // Tentar extrair UF do endereço do devedor (ex: CIDADE/SP)
+  const ufDoEndereco = extrairUFDoEndereco(enderecoDevedor);
+  if (ufDoEndereco && ESTADOS_BR[ufDoEndereco]) {
+    return `${foroOriginal}, ESTADO ${ESTADOS_BR[ufDoEndereco]},`;
+  }
   // Tentar identificar o estado pela cidade
   const cidadeNorm = foroOriginal;
   for (const [cidade, sigla] of Object.entries(CIDADE_ESTADO)) {
@@ -292,7 +311,7 @@ export async function getDadosPeticoes(loteId: number): Promise<DadosPeticaoDeve
       valoresPlaceholders[ph] = '';
     }
     // Pré-preencher com dados conhecidos
-    if (valoresPlaceholders.hasOwnProperty('FORO')) valoresPlaceholders['FORO'] = formatarForo(dev.foro);
+    if (valoresPlaceholders.hasOwnProperty('FORO')) valoresPlaceholders['FORO'] = formatarForo(dev.foro, dev.contrarioEndereco);
     if (valoresPlaceholders.hasOwnProperty('COOPERATIVA')) valoresPlaceholders['COOPERATIVA'] = dev.cooperativa ?? '';
     if (valoresPlaceholders.hasOwnProperty('NOME_COOP')) valoresPlaceholders['NOME_COOP'] = cliente?.nomeCompleto ?? '';
     if (valoresPlaceholders.hasOwnProperty('DOC_COOP')) valoresPlaceholders['DOC_COOP'] = cliente?.doc ?? '';

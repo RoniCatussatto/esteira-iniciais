@@ -193,7 +193,7 @@ function parseNomeArquivo(nome: string): { categoria: string; qtd: number } | nu
   if (!match) return null;
   const categoriaCandidata = match[1].trim();
   const qtd = parseInt(match[2], 10);
-  if (isNaN(qtd) || qtd < 1 || qtd > 20) return null;
+  if (isNaN(qtd) || qtd < 1 || qtd > 30) return null;
   // Verifica se a categoria é válida (case-insensitive)
   const found = CATEGORIAS.find(
     (c) => c.toLowerCase() === categoriaCandidata.toLowerCase()
@@ -506,4 +506,3 @@ export default function ModelosCalculoPage() {
     </div>
   );
 }
-

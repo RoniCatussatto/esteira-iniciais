@@ -128,11 +128,6 @@ export default function Home() {
             <p className="text-sm text-gray-500">Sistema de Elaboração de Planilhas e Petições Iniciais</p>
           </div>
           <div className="ml-auto">
-            {user && (
-              <span className="text-sm text-gray-500 mr-3 hidden sm:inline">
-                {user.name || user.email}
-              </span>
-            )}
             <Link href="/indices">
               <Button variant="outline" size="sm" className="gap-1.5 mr-2">
                 <TrendingUp className="w-4 h-4" />

@@ -1,4 +1,4 @@
-import { decimal, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { decimal, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -147,7 +147,9 @@ export const extracoes = mysqlTable("extracoes", {
   tipoContrato: mysqlEnum("tipoContrato", ["emprestimo", "cheque", "cartao"]).default("emprestimo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  uniqueContratoDevedor: uniqueIndex("extracoes_unique_contrato").on(table.devedorId, table.loteId, table.numeroContrato),
+}));
 
 export type Extracao = typeof extracoes.$inferSelect;
 export type InsertExtracao = typeof extracoes.$inferInsert;

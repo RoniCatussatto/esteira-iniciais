@@ -12,6 +12,7 @@
 import { getDb } from "./db";
 import { clientes, docConfigs, extracoes, devedores } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -586,129 +587,70 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
   const db = await getDb();
   if (!db) return;
 
-  const extracoesDev = await db.select().from(extracoes).where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
-
   // Determinar o contrato alvo: usar o número identificado no nome do arquivo
   const contratoAlvo = campos.numeroContratoIdentificado?.trim() ?? null;
   console.log(`[Extractor] Contrato alvo: ${contratoAlvo ?? "(todos)"}`);
 
-  if (extracoesDev.length === 0) {
-    // Inicializar extrações a partir dos contratos do devedor
-    const devResult = await db.select().from(devedores).where(eq(devedores.id, devedorId)).limit(1);
-    const contratosStr = devResult[0]?.contratos;
-    if (contratosStr) {
-      const contratos = contratosStr.split(/\s*\/\s*/).map((c) => c.trim()).filter(Boolean);
-      if (contratos.length > 0) {
-        // Re-verificar existência imediatamente antes de inserir (proteção contra race condition em uploads paralelos)
-        const existentesAgora = await db.select({ nc: extracoes.numeroContrato })
-          .from(extracoes).where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
-        const existentesSet = new Set(existentesAgora.map((e) => e.nc));
-        const contratosNovos = contratos.filter((c) => !existentesSet.has(c));
-        if (contratosNovos.length > 0) {
-          await db.insert(extracoes).values(contratosNovos.map((c) => {
-            const isAlvo = !contratoAlvo || c === contratoAlvo;
-            return {
-              devedorId,
-              loteId,
-              numeroContrato: c,
-              dadoPlanilha01: isAlvo ? (campos.dadoPlanilha01 ?? null) : null,
-              dadoPlanilha02: isAlvo ? (campos.dadoPlanilha02 ?? null) : null,
-              dadoPlanilha03: isAlvo ? (campos.dadoPlanilha03 ?? null) : null,
-              dadoPlanilha04: isAlvo ? (campos.dadoPlanilha04 ?? null) : null,
-              multa2pct: isAlvo ? (campos.multa2pct ?? "branco") : "branco",
-              moraEspecifica: isAlvo ? (campos.moraEspecifica ?? null) : null,
-              tipoContrato: isAlvo ? (campos.tipoContrato ?? "emprestimo") : "emprestimo",
-            };
-          }));
-          console.log(`[Extractor] Extrações inicializadas: devedor ${devedorId}, ${contratosNovos.length} novo(s) de ${contratos.length}${contratoAlvo ? `, dados em "${contratoAlvo}"` : ""}`);
-          // Se ainda há contratos existentes com contrato alvo, atualizar
-          if (contratoAlvo && existentesSet.has(contratoAlvo)) {
-            const extAlvo = await db.select().from(extracoes)
-              .where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
-            for (const ext of extAlvo.filter((e) => e.numeroContrato === contratoAlvo)) {
-              const upd: Record<string, unknown> = {};
-              if (campos.dadoPlanilha01 !== undefined && !ext.dadoPlanilha01) upd.dadoPlanilha01 = campos.dadoPlanilha01;
-              if (campos.dadoPlanilha02 !== undefined && !ext.dadoPlanilha02) upd.dadoPlanilha02 = campos.dadoPlanilha02;
-              if (campos.dadoPlanilha03 !== undefined && !ext.dadoPlanilha03) upd.dadoPlanilha03 = campos.dadoPlanilha03;
-              if (campos.dadoPlanilha04 !== undefined && !ext.dadoPlanilha04) upd.dadoPlanilha04 = campos.dadoPlanilha04;
-              if (campos.multa2pct !== undefined && campos.multa2pct !== "branco") upd.multa2pct = campos.multa2pct;
-              if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) upd.moraEspecifica = campos.moraEspecifica;
-              if (Object.keys(upd).length > 0) await db.update(extracoes).set(upd).where(eq(extracoes.id, ext.id));
-            }
-          }
-        } else {
-          // Todos já existem — atualizar apenas o contrato alvo
-          console.log(`[Extractor] Race condition evitada: todos os contratos já existem para devedor ${devedorId}`);
-          if (contratoAlvo) {
-            const extAlvo = await db.select().from(extracoes)
-              .where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
-            for (const ext of extAlvo.filter((e) => e.numeroContrato === contratoAlvo)) {
-              const upd: Record<string, unknown> = {};
-              if (campos.dadoPlanilha01 !== undefined && !ext.dadoPlanilha01) upd.dadoPlanilha01 = campos.dadoPlanilha01;
-              if (campos.dadoPlanilha02 !== undefined && !ext.dadoPlanilha02) upd.dadoPlanilha02 = campos.dadoPlanilha02;
-              if (campos.dadoPlanilha03 !== undefined && !ext.dadoPlanilha03) upd.dadoPlanilha03 = campos.dadoPlanilha03;
-              if (campos.dadoPlanilha04 !== undefined && !ext.dadoPlanilha04) upd.dadoPlanilha04 = campos.dadoPlanilha04;
-              if (campos.multa2pct !== undefined && campos.multa2pct !== "branco") upd.multa2pct = campos.multa2pct;
-              if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) upd.moraEspecifica = campos.moraEspecifica;
-              if (Object.keys(upd).length > 0) await db.update(extracoes).set(upd).where(eq(extracoes.id, ext.id));
-            }
-          }
-          return;
-        }
-      }
+  // ── Passo 1: Garantir que todos os contratos do devedor existam no banco ──
+  // Usa INSERT IGNORE para ser atômico — se dois processos tentarem inserir ao mesmo tempo,
+  // a UNIQUE constraint (devedorId, loteId, numeroContrato) garante que apenas um terá sucesso.
+  const devResult = await db.select().from(devedores).where(eq(devedores.id, devedorId)).limit(1);
+  const contratosStr = devResult[0]?.contratos;
+  if (contratosStr) {
+    const contratos = contratosStr.split(/\s*\/\s*/).map((c) => c.trim()).filter(Boolean);
+    for (const c of contratos) {
+      const isAlvo = !contratoAlvo || c === contratoAlvo;
+      // INSERT IGNORE: ignora silenciosamente se já existir (violação da UNIQUE constraint)
+      await db.execute(sql`
+        INSERT IGNORE INTO extracoes
+          (devedorId, loteId, numeroContrato, dadoPlanilha01, dadoPlanilha02, dadoPlanilha03, dadoPlanilha04, multa2pct, moraEspecifica, tipoContrato, createdAt, updatedAt)
+        VALUES (
+          ${devedorId}, ${loteId}, ${c},
+          ${isAlvo ? (campos.dadoPlanilha01 ?? null) : null},
+          ${isAlvo ? (campos.dadoPlanilha02 ?? null) : null},
+          ${isAlvo ? (campos.dadoPlanilha03 ?? null) : null},
+          ${isAlvo ? (campos.dadoPlanilha04 ?? null) : null},
+          ${isAlvo ? (campos.multa2pct ?? "branco") : "branco"},
+          ${isAlvo ? (campos.moraEspecifica ?? null) : null},
+          ${isAlvo ? (campos.tipoContrato ?? "emprestimo") : "emprestimo"},
+          NOW(), NOW()
+        )
+      `);
     }
-  } else {
-    // Atualizar apenas os campos que foram extraídos
-    // Filtrar apenas o contrato alvo (se identificado); caso contrário, atualizar todos
-    const extParaAtualizar = contratoAlvo
-      ? extracoesDev.filter((e) => e.numeroContrato === contratoAlvo)
-      : extracoesDev;
+    console.log(`[Extractor] INSERT IGNORE concluído: devedor ${devedorId}, ${contratos.length} contrato(s)${contratoAlvo ? `, alvo="${contratoAlvo}"` : ""}`);
+  }
 
-    if (extParaAtualizar.length === 0 && contratoAlvo) {
-      // Contrato alvo não encontrado nas extrações existentes — inserir novo
-      await db.insert(extracoes).values({
-        devedorId,
-        loteId,
-        numeroContrato: contratoAlvo,
-        dadoPlanilha01: campos.dadoPlanilha01 ?? null,
-        dadoPlanilha02: campos.dadoPlanilha02 ?? null,
-        dadoPlanilha03: campos.dadoPlanilha03 ?? null,
-        dadoPlanilha04: campos.dadoPlanilha04 ?? null,
-        multa2pct: campos.multa2pct ?? "branco",
-        moraEspecifica: campos.moraEspecifica ?? null,
-        tipoContrato: campos.tipoContrato ?? "emprestimo",
-      });
-      console.log(`[Extractor] Contrato "${contratoAlvo}" não encontrado — inserido novo registro`);
-    } else {
-      for (const ext of extParaAtualizar) {
-        // Alta prioridade (ex: Fatura, prioridade=0): sempre sobrescreve dp01/dp02
-        // Prioridade normal (ex: Extrato, prioridade=1 ou undefined): só preenche campos vazios
-        const altaPrioridade = (campos.prioridade ?? 1) === 0;
-        const updateDataPorExt: Record<string, unknown> = {};
-        const dp01Atual = ext.dadoPlanilha01;
-        const dp02Atual = ext.dadoPlanilha02;
-        const dp03Atual = ext.dadoPlanilha03;
-        const dp04Atual = ext.dadoPlanilha04;
-        console.log(`[Extractor] Contrato ${ext.numeroContrato}: dp01="${dp01Atual}" dp02="${dp02Atual}" dp03="${dp03Atual}" dp04="${dp04Atual}"`);
-        console.log(`[Extractor] Novos valores: dp01="${campos.dadoPlanilha01}" dp02="${campos.dadoPlanilha02}" dp03="${campos.dadoPlanilha03}" dp04="${campos.dadoPlanilha04}"`);
-        if (campos.dadoPlanilha01 !== undefined && (altaPrioridade || !dp01Atual)) updateDataPorExt.dadoPlanilha01 = campos.dadoPlanilha01;
-        if (campos.dadoPlanilha02 !== undefined && (altaPrioridade || !dp02Atual)) updateDataPorExt.dadoPlanilha02 = campos.dadoPlanilha02;
-        if (campos.dadoPlanilha03 !== undefined && (altaPrioridade || !dp03Atual)) updateDataPorExt.dadoPlanilha03 = campos.dadoPlanilha03;
-        if (campos.dadoPlanilha04 !== undefined && (altaPrioridade || !dp04Atual)) updateDataPorExt.dadoPlanilha04 = campos.dadoPlanilha04;
-        console.log(`[Extractor] updateData para ${ext.numeroContrato}:`, JSON.stringify(updateDataPorExt));
-        // multa2pct: sobrescreve se "branco"/nulo OU se o novo valor é explícito (sim/nao) — corrige extrações erradas anteriores
-        if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco" || campos.multa2pct !== "branco")) updateDataPorExt.multa2pct = campos.multa2pct;
-        if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) updateDataPorExt.moraEspecifica = campos.moraEspecifica;
-        // tipoContrato: sobrescreve apenas se ainda for o default "emprestimo" (pode ter sido definido por outro doc)
-        if (campos.tipoContrato !== undefined && (!ext.tipoContrato || ext.tipoContrato === "emprestimo")) {
-          updateDataPorExt.tipoContrato = campos.tipoContrato;
-        }
-        if (Object.keys(updateDataPorExt).length > 0) {
-          await db.update(extracoes).set(updateDataPorExt).where(eq(extracoes.id, ext.id));
-        }
-      }
-      console.log(`[Extractor] Extrações atualizadas: devedor ${devedorId}, ${extParaAtualizar.length} contrato(s)${contratoAlvo ? ` (alvo: "${contratoAlvo}")` : " (todos)"}`);
+  // ── Passo 2: Atualizar o contrato alvo com os dados extraídos ──
+  // Buscar o registro atual para aplicar regras de prioridade
+  const extracoesDev = await db.select().from(extracoes).where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
+  const extParaAtualizar = contratoAlvo
+    ? extracoesDev.filter((e) => e.numeroContrato === contratoAlvo)
+    : extracoesDev;
+
+  for (const ext of extParaAtualizar) {
+    const altaPrioridade = (campos.prioridade ?? 1) === 0;
+    const updateData: Record<string, unknown> = {};
+    const dp01Atual = ext.dadoPlanilha01;
+    const dp02Atual = ext.dadoPlanilha02;
+    const dp03Atual = ext.dadoPlanilha03;
+    const dp04Atual = ext.dadoPlanilha04;
+    console.log(`[Extractor] Contrato ${ext.numeroContrato}: dp01="${dp01Atual}" dp02="${dp02Atual}" dp03="${dp03Atual}" dp04="${dp04Atual}"`);
+    console.log(`[Extractor] Novos valores: dp01="${campos.dadoPlanilha01}" dp02="${campos.dadoPlanilha02}" dp03="${campos.dadoPlanilha03}" dp04="${campos.dadoPlanilha04}"`);
+    if (campos.dadoPlanilha01 !== undefined && (altaPrioridade || !dp01Atual)) updateData.dadoPlanilha01 = campos.dadoPlanilha01;
+    if (campos.dadoPlanilha02 !== undefined && (altaPrioridade || !dp02Atual)) updateData.dadoPlanilha02 = campos.dadoPlanilha02;
+    if (campos.dadoPlanilha03 !== undefined && (altaPrioridade || !dp03Atual)) updateData.dadoPlanilha03 = campos.dadoPlanilha03;
+    if (campos.dadoPlanilha04 !== undefined && (altaPrioridade || !dp04Atual)) updateData.dadoPlanilha04 = campos.dadoPlanilha04;
+    // multa2pct: sobrescreve se "branco"/nulo OU se o novo valor é explícito (sim/nao) — corrige extrações erradas anteriores
+    if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco" || campos.multa2pct !== "branco")) updateData.multa2pct = campos.multa2pct;
+    if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) updateData.moraEspecifica = campos.moraEspecifica;
+    // tipoContrato: sobrescreve apenas se ainda for o default "emprestimo"
+    if (campos.tipoContrato !== undefined && (!ext.tipoContrato || ext.tipoContrato === "emprestimo")) updateData.tipoContrato = campos.tipoContrato;
+    if (Object.keys(updateData).length > 0) {
+      await db.update(extracoes).set(updateData).where(eq(extracoes.id, ext.id));
     }
+  }
+  if (extParaAtualizar.length > 0) {
+    console.log(`[Extractor] Extrações atualizadas: devedor ${devedorId}, ${extParaAtualizar.length} contrato(s)${contratoAlvo ? ` (alvo: "${contratoAlvo}")` : " (todos)"}`);
   }
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE `extracoes` ADD CONSTRAINT `extracoes_unique_contrato` UNIQUE(`devedorId`,`loteId`,`numeroContrato`);

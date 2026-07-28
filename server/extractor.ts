@@ -178,6 +178,16 @@ function aplicarTransformacao(valor: string, transformacao?: string): string {
   if (t === "removerpontomilhar" || t.includes("removerponto")) {
     resultado = resultado.replace(/\./g, "");
   }
+  // Extrai o último token separado por tab (útil para linha 36 com "CONTRATO_ANTIGO\tCONTRATO_NOVO")
+  if (t === "ultimotoken" || t.includes("ultimo token") || t.includes("últimotoken")) {
+    const partes = resultado.split(/\t/).map((s) => s.trim()).filter(Boolean);
+    resultado = partes[partes.length - 1] ?? resultado;
+  }
+  // Extrai o primeiro token separado por tab
+  if (t === "primeirotoken" || t.includes("primeiro token") || t.includes("primeirotoken")) {
+    const partes = resultado.split(/\t/).map((s) => s.trim()).filter(Boolean);
+    resultado = partes[0] ?? resultado;
+  }
   return resultado.trim();
 }
 

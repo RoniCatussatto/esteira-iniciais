@@ -599,23 +599,62 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
     if (contratosStr) {
       const contratos = contratosStr.split(/\s*\/\s*/).map((c) => c.trim()).filter(Boolean);
       if (contratos.length > 0) {
-        // Se temos um contrato alvo, aplicar dados apenas nele; nos demais, inicializar em branco
-        await db.insert(extracoes).values(contratos.map((c) => {
-          const isAlvo = !contratoAlvo || c === contratoAlvo;
-          return {
-            devedorId,
-            loteId,
-            numeroContrato: c,
-            dadoPlanilha01: isAlvo ? (campos.dadoPlanilha01 ?? null) : null,
-            dadoPlanilha02: isAlvo ? (campos.dadoPlanilha02 ?? null) : null,
-            dadoPlanilha03: isAlvo ? (campos.dadoPlanilha03 ?? null) : null,
-            dadoPlanilha04: isAlvo ? (campos.dadoPlanilha04 ?? null) : null,
-            multa2pct: isAlvo ? (campos.multa2pct ?? "branco") : "branco",
-            moraEspecifica: isAlvo ? (campos.moraEspecifica ?? null) : null,
-            tipoContrato: isAlvo ? (campos.tipoContrato ?? "emprestimo") : "emprestimo",
-          };
-        }));
-        console.log(`[Extractor] Extrações inicializadas: devedor ${devedorId}, ${contratos.length} contrato(s)${contratoAlvo ? `, dados aplicados apenas em "${contratoAlvo}"` : ""}`);
+        // Re-verificar existência imediatamente antes de inserir (proteção contra race condition em uploads paralelos)
+        const existentesAgora = await db.select({ nc: extracoes.numeroContrato })
+          .from(extracoes).where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
+        const existentesSet = new Set(existentesAgora.map((e) => e.nc));
+        const contratosNovos = contratos.filter((c) => !existentesSet.has(c));
+        if (contratosNovos.length > 0) {
+          await db.insert(extracoes).values(contratosNovos.map((c) => {
+            const isAlvo = !contratoAlvo || c === contratoAlvo;
+            return {
+              devedorId,
+              loteId,
+              numeroContrato: c,
+              dadoPlanilha01: isAlvo ? (campos.dadoPlanilha01 ?? null) : null,
+              dadoPlanilha02: isAlvo ? (campos.dadoPlanilha02 ?? null) : null,
+              dadoPlanilha03: isAlvo ? (campos.dadoPlanilha03 ?? null) : null,
+              dadoPlanilha04: isAlvo ? (campos.dadoPlanilha04 ?? null) : null,
+              multa2pct: isAlvo ? (campos.multa2pct ?? "branco") : "branco",
+              moraEspecifica: isAlvo ? (campos.moraEspecifica ?? null) : null,
+              tipoContrato: isAlvo ? (campos.tipoContrato ?? "emprestimo") : "emprestimo",
+            };
+          }));
+          console.log(`[Extractor] Extrações inicializadas: devedor ${devedorId}, ${contratosNovos.length} novo(s) de ${contratos.length}${contratoAlvo ? `, dados em "${contratoAlvo}"` : ""}`);
+          // Se ainda há contratos existentes com contrato alvo, atualizar
+          if (contratoAlvo && existentesSet.has(contratoAlvo)) {
+            const extAlvo = await db.select().from(extracoes)
+              .where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
+            for (const ext of extAlvo.filter((e) => e.numeroContrato === contratoAlvo)) {
+              const upd: Record<string, unknown> = {};
+              if (campos.dadoPlanilha01 !== undefined && !ext.dadoPlanilha01) upd.dadoPlanilha01 = campos.dadoPlanilha01;
+              if (campos.dadoPlanilha02 !== undefined && !ext.dadoPlanilha02) upd.dadoPlanilha02 = campos.dadoPlanilha02;
+              if (campos.dadoPlanilha03 !== undefined && !ext.dadoPlanilha03) upd.dadoPlanilha03 = campos.dadoPlanilha03;
+              if (campos.dadoPlanilha04 !== undefined && !ext.dadoPlanilha04) upd.dadoPlanilha04 = campos.dadoPlanilha04;
+              if (campos.multa2pct !== undefined && campos.multa2pct !== "branco") upd.multa2pct = campos.multa2pct;
+              if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) upd.moraEspecifica = campos.moraEspecifica;
+              if (Object.keys(upd).length > 0) await db.update(extracoes).set(upd).where(eq(extracoes.id, ext.id));
+            }
+          }
+        } else {
+          // Todos já existem — atualizar apenas o contrato alvo
+          console.log(`[Extractor] Race condition evitada: todos os contratos já existem para devedor ${devedorId}`);
+          if (contratoAlvo) {
+            const extAlvo = await db.select().from(extracoes)
+              .where(and(eq(extracoes.devedorId, devedorId), eq(extracoes.loteId, loteId)));
+            for (const ext of extAlvo.filter((e) => e.numeroContrato === contratoAlvo)) {
+              const upd: Record<string, unknown> = {};
+              if (campos.dadoPlanilha01 !== undefined && !ext.dadoPlanilha01) upd.dadoPlanilha01 = campos.dadoPlanilha01;
+              if (campos.dadoPlanilha02 !== undefined && !ext.dadoPlanilha02) upd.dadoPlanilha02 = campos.dadoPlanilha02;
+              if (campos.dadoPlanilha03 !== undefined && !ext.dadoPlanilha03) upd.dadoPlanilha03 = campos.dadoPlanilha03;
+              if (campos.dadoPlanilha04 !== undefined && !ext.dadoPlanilha04) upd.dadoPlanilha04 = campos.dadoPlanilha04;
+              if (campos.multa2pct !== undefined && campos.multa2pct !== "branco") upd.multa2pct = campos.multa2pct;
+              if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) upd.moraEspecifica = campos.moraEspecifica;
+              if (Object.keys(upd).length > 0) await db.update(extracoes).set(upd).where(eq(extracoes.id, ext.id));
+            }
+          }
+          return;
+        }
       }
     }
   } else {
@@ -657,8 +696,8 @@ async function gravarExtracoes(devedorId: number, loteId: number, campos: Campos
         if (campos.dadoPlanilha03 !== undefined && (altaPrioridade || !dp03Atual)) updateDataPorExt.dadoPlanilha03 = campos.dadoPlanilha03;
         if (campos.dadoPlanilha04 !== undefined && (altaPrioridade || !dp04Atual)) updateDataPorExt.dadoPlanilha04 = campos.dadoPlanilha04;
         console.log(`[Extractor] updateData para ${ext.numeroContrato}:`, JSON.stringify(updateDataPorExt));
-        // multa2pct e moraEspecifica: sobrescreve apenas se ainda "branco"/nulo
-        if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco")) updateDataPorExt.multa2pct = campos.multa2pct;
+        // multa2pct: sobrescreve se "branco"/nulo OU se o novo valor é explícito (sim/nao) — corrige extrações erradas anteriores
+        if (campos.multa2pct !== undefined && (!ext.multa2pct || ext.multa2pct === "branco" || campos.multa2pct !== "branco")) updateDataPorExt.multa2pct = campos.multa2pct;
         if (campos.moraEspecifica !== undefined && !ext.moraEspecifica) updateDataPorExt.moraEspecifica = campos.moraEspecifica;
         // tipoContrato: sobrescreve apenas se ainda for o default "emprestimo" (pode ter sido definido por outro doc)
         if (campos.tipoContrato !== undefined && (!ext.tipoContrato || ext.tipoContrato === "emprestimo")) {

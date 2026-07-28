@@ -152,32 +152,55 @@ export default function DocumentosPage() {
     setUploadProgress({ atual: 0, total: collected.length });
     setUploadResultado(null);
     try {
-      const formData = new FormData();
-      collected.forEach(({ file, pasta }) => {
-        formData.append("files", file);
-        formData.append("nomePasta", pasta);
-      });
-      setUploadProgress({ atual: collected.length, total: collected.length });
-      const response = await fetch(`/api/upload/docs/${loteId}`, {
-        method: "POST",
-        body: formData,
-      });
-      const contentType = response.headers.get('content-type') ?? '';
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('[Upload] Resposta não-JSON:', response.status, contentType, text.slice(0, 500));
-        throw new Error(`Erro no servidor (HTTP ${response.status}). Verifique o console do navegador para detalhes.`);
+      // Envia em lotes de 5 arquivos para evitar HTTP 413 (limite ~32MB do gateway de produção)
+      const BATCH_SIZE = 5;
+      const allResultados: UploadResultado[] = [];
+      let totalVinculados = 0;
+      let totalSemVinculo = 0;
+      let enviados = 0;
+
+      for (let start = 0; start < collected.length; start += BATCH_SIZE) {
+        const batch = collected.slice(start, start + BATCH_SIZE);
+        const formData = new FormData();
+        batch.forEach(({ file, pasta }) => {
+          formData.append("files", file);
+          formData.append("nomePasta", pasta);
+        });
+
+        const response = await fetch(`/api/upload/docs/${loteId}`, {
+          method: "POST",
+          body: formData,
+        });
+        const contentType = response.headers.get('content-type') ?? '';
+        if (!contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('[Upload] Resposta não-JSON:', response.status, contentType, text.slice(0, 500));
+          throw new Error(`Erro no servidor (HTTP ${response.status}) ao enviar lote ${Math.floor(start / BATCH_SIZE) + 1}. Verifique o console para detalhes.`);
+        }
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Erro no upload");
+
+        allResultados.push(...(result.resultados ?? []));
+        totalVinculados += result.vinculados ?? 0;
+        totalSemVinculo += result.semVinculo ?? 0;
+        enviados += batch.length;
+        setUploadProgress({ atual: enviados, total: collected.length });
       }
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Erro no upload");
-      setUploadResultado(result);
-      toast.success(`${result.vinculados} arquivo(s) vinculado(s) com sucesso!`);
-      if (result.semVinculo > 0) {
-        toast.warning(`${result.semVinculo} arquivo(s) não foram vinculados a nenhum devedor.`);
+
+      const resultadoFinal = {
+        totalArquivos: collected.length,
+        vinculados: totalVinculados,
+        semVinculo: totalSemVinculo,
+        resultados: allResultados,
+      };
+      setUploadResultado(resultadoFinal);
+      toast.success(`${totalVinculados} arquivo(s) vinculado(s) com sucesso!`);
+      if (totalSemVinculo > 0) {
+        toast.warning(`${totalSemVinculo} arquivo(s) não foram vinculados a nenhum devedor.`);
       }
       refetchDocs();
       const idsComDocs = new Set(
-        (result.resultados as UploadResultado[])
+        allResultados
           .filter((r: UploadResultado) => r.devedorId !== null)
           .map((r: UploadResultado) => r.devedorId as number)
       );

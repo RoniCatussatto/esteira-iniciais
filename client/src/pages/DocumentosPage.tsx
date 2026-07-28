@@ -162,6 +162,12 @@ export default function DocumentosPage() {
         method: "POST",
         body: formData,
       });
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('[Upload] Resposta não-JSON:', response.status, contentType, text.slice(0, 500));
+        throw new Error(`Erro no servidor (HTTP ${response.status}). Verifique o console do navegador para detalhes.`);
+      }
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Erro no upload");
       setUploadResultado(result);

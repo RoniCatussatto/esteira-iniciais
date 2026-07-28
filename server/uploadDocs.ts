@@ -13,6 +13,12 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 export const uploadDocsRouter = Router();
 
+// Log de diagnóstico — confirma chegada da requisição ao router em produção
+uploadDocsRouter.use((req, _res, next) => {
+  console.log(`[UploadDocs] ${req.method} ${req.originalUrl} content-type=${req.headers['content-type']?.slice(0,60)}`);
+  next();
+});
+
 /**
  * Normaliza uma string para comparação: remove acentos, pontuação, espaços extras
  * e converte para minúsculas.

@@ -464,10 +464,9 @@ export async function gerarPeticoes(input: GerarPeticoesInput): Promise<GerarPet
           paragraphLoop: true,
           linebreaks: true,
           nullGetter: () => '',
-          data: valoresPlaceholders,
         });
 
-        doc.render();
+        doc.render(valoresPlaceholders);
 
         const docxBuffer: Buffer = doc.getZip().generate({ type: 'nodebuffer' });
 

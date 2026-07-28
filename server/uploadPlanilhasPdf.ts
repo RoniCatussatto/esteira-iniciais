@@ -1,9 +1,5 @@
 import multer from "multer";
 import { Router } from "express";
-import { execSync } from "child_process";
-import { writeFileSync, unlinkSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import { getDb } from "./db";
 import { devedores } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -29,14 +25,15 @@ export const uploadPlanilhasPdfRouter = Router();
  * Fallback: busca pelo último "Total Geral" no texto.
  * Retorna o valor em formato BR (ex: "12.148,74") ou null se não encontrar.
  */
-function extrairTotalGeral(pdfBuffer: Buffer): string | null {
-  const tmpPath = join(tmpdir(), `planilha_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+async function extrairTotalGeral(pdfBuffer: Buffer): Promise<string | null> {
   try {
-    writeFileSync(tmpPath, pdfBuffer);
-    const text = execSync(`pdftotext ${JSON.stringify(tmpPath)} -`, { encoding: "utf8", timeout: 15000 });
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
+    const result = await parser.getText();
+    const text = result.text ?? "";
 
-    // Extrair todos os valores monetários do texto
-    const todosValores = Array.from(text.matchAll(/R\$\s*([\d,\.]+)/g)).map(m => m[1]);
+    // Extrair todos os valores monetários do texto (pdf-parse usa "R$ 1.234,56")
+    const todosValores = Array.from(text.matchAll(/R\$\s*([\d.,]+)/g)).map(m => m[1]);
 
     if (todosValores.length > 0) {
       // O Total Geral é sempre o maior valor monetário da planilha
@@ -48,17 +45,10 @@ function extrairTotalGeral(pdfBuffer: Buffer): string | null {
       return normalizarValorBR(maior);
     }
 
-    // Fallback: busca pelo último "Total Geral" e pega o primeiro valor após ele
-    const idx = text.lastIndexOf("Total Geral");
-    if (idx < 0) return null;
-    const after = text.slice(idx);
-    const m = after.match(/R\$\s*([\d,\.]+)/);
-    if (!m) return null;
-    return normalizarValorBR(m[1]);
-  } catch {
     return null;
-  } finally {
-    try { unlinkSync(tmpPath); } catch { /* ignorar */ }
+  } catch (err) {
+    console.error("[uploadPlanilhasPdf] Erro ao extrair texto do PDF:", err);
+    return null;
   }
 }
 
@@ -141,7 +131,7 @@ uploadPlanilhasPdfRouter.post(
       const resultados = await Promise.all(
         files.map(async (file) => {
           const nomeArquivo = Buffer.from(file.originalname, "latin1").toString("utf8");
-          const valorExtraido = extrairTotalGeral(file.buffer);
+          const valorExtraido = await extrairTotalGeral(file.buffer);
           const devedorId = await identificarDevedorPorNomeArquivo(nomeArquivo, loteId);
           return {
             nomeArquivo,

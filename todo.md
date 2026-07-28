@@ -143,3 +143,5 @@
 - [x] Proteger todas as rotas do frontend com verificação de sessão local
 - [x] Criar script seed-admin.mjs para cadastrar usuário admin via linha de comando
 - [x] Remover dependência do Manus OAuth do fluxo principal (manter apenas como fallback de recuperação)
+- [x] Extração do Total Geral (maior valor monetário) via pdftotext
+- [x] Corrigir extração do Total Geral em produção: substituir pdftotext (CLI, não disponível no Cloud Run) por pdf-parse (Node.js)

@@ -215,6 +215,9 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
     const lote = await getLoteById(loteId);
     const cooperativa = lote?.cooperativa ?? null;
 
+    // Processar todos os arquivos em paralelo (upload S3 + vinculação + registro no banco)
+    // A extração de dados fica em background (fire-and-forget) para não bloquear a resposta
+    const CONCURRENCY = 10; // máximo de uploads simultâneos para não sobrecarregar S3
     const resultados: Array<{
       arquivo: string;
       pasta: string;
@@ -222,84 +225,93 @@ uploadDocsRouter.post("/:loteId", upload.array("files", 500), async (req, res) =
       devedorNome: string | null;
       score: number;
       fileUrl: string;
-    }> = [];
+    }> = new Array(files.length);
 
-    const semVinculo: string[] = [];
+    // Processar em lotes de CONCURRENCY para controlar paralelismo
+    for (let start = 0; start < files.length; start += CONCURRENCY) {
+      const batch = files.slice(start, start + CONCURRENCY);
+      await Promise.all(batch.map(async (file, batchIdx) => {
+        const i = start + batchIdx;
+        const nomePasta = nomesPasta[i] ?? "";
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const nomePasta = nomesPasta[i] ?? "";
+        // Upload para S3
+        const fileKey = `lote-${loteId}/docs/${Date.now()}-${i}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const { url } = await storagePut(fileKey, file.buffer, file.mimetype);
 
-      // Fazer upload para S3
-      const fileKey = `lote-${loteId}/docs/${Date.now()}-${i}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const { url } = await storagePut(fileKey, file.buffer, file.mimetype);
+        // Vincular ao devedor
+        const match = matchDevedorPorPasta(nomePasta, devedoresLote);
 
-      // Tentar vincular ao devedor
-      const match = matchDevedorPorPasta(nomePasta, devedoresLote);
-
-      if (match) {
-        const devedor = devedoresLote.find((d) => d.id === match.devedorId);
-        await createDocumento({
-          loteId,
-          devedorId: match.devedorId,
-          nomeArquivo: file.originalname,
-          nomePasta,
-          fileKey,
-          fileUrl: url,
-          mimeType: file.mimetype,
-          tamanho: file.size,
-        });
-        resultados.push({
-          arquivo: file.originalname,
-          pasta: nomePasta,
-          devedorId: match.devedorId,
-          devedorNome: devedor?.contrarioNome ?? null,
-          score: Math.round(match.score * 100),
-          fileUrl: url,
-        });
-        // Extração automática com buffer em memória
-        if (cooperativa && match.devedorId) {
-          const triagem = await triarDocumentos(
-            [{ fileKey, nomeArquivo: file.originalname, mimeType: file.mimetype }],
-            cooperativa
-          );
-          if (triagem.identificados.length > 0) {
-            processarItemTriagem(triagem.identificados[0], match.devedorId, loteId, file.buffer).catch((err) => {
-              console.error("[UploadDocs/Batch] Erro na extração:", err);
+        if (match) {
+          const devedor = devedoresLote.find((d) => d.id === match.devedorId);
+          await createDocumento({
+            loteId,
+            devedorId: match.devedorId,
+            nomeArquivo: file.originalname,
+            nomePasta,
+            fileKey,
+            fileUrl: url,
+            mimeType: file.mimetype,
+            tamanho: file.size,
+          });
+          resultados[i] = {
+            arquivo: file.originalname,
+            pasta: nomePasta,
+            devedorId: match.devedorId,
+            devedorNome: devedor?.contrarioNome ?? null,
+            score: Math.round(match.score * 100),
+            fileUrl: url,
+          };
+          // Extração e salvamento de texto em background (não bloqueia a resposta)
+          if (cooperativa && match.devedorId) {
+            const bufferCopy = Buffer.from(file.buffer);
+            setImmediate(() => {
+              triarDocumentos(
+                [{ fileKey, nomeArquivo: file.originalname, mimeType: file.mimetype }],
+                cooperativa
+              ).then((triagem) => {
+                if (triagem.identificados.length > 0) {
+                  processarItemTriagem(triagem.identificados[0], match.devedorId, loteId, bufferCopy).catch((err) => {
+                    console.error("[UploadDocs/Batch] Erro na extração:", err);
+                  });
+                }
+              }).catch((err) => console.error("[UploadDocs/Batch] Erro na triagem:", err));
             });
           }
+          // Salvar texto do PDF em background para re-extração futura
+          if (file.mimetype?.includes("pdf") || file.originalname.toLowerCase().endsWith(".pdf")) {
+            const bufferCopy2 = Buffer.from(file.buffer);
+            setImmediate(() => {
+              extrairTextoPDF(bufferCopy2).then(async (texto) => {
+                if (texto) {
+                  const db2 = await getDb();
+                  if (db2) {
+                    const docInserido = await db2.select({ id: documentosTable.id })
+                      .from(documentosTable).where(eq(documentosTable.fileKey, fileKey)).limit(1);
+                    if (docInserido[0]) await updateDocumentoTexto(docInserido[0].id, texto);
+                  }
+                }
+              }).catch(() => {/* ignorar erros de salvamento de texto */});
+            });
+          }
+        } else {
+          resultados[i] = {
+            arquivo: file.originalname,
+            pasta: nomePasta,
+            devedorId: null,
+            devedorNome: null,
+            score: 0,
+            fileUrl: url,
+          };
         }
-        // Salvar texto extraído do PDF para re-extração futura sem precisar baixar do S3
-        if (file.mimetype?.includes("pdf") || file.originalname.toLowerCase().endsWith(".pdf")) {
-          extrairTextoPDF(file.buffer).then(async (texto) => {
-            if (texto) {
-              const db2 = await getDb();
-              if (db2) {
-                const docInserido = await db2.select({ id: documentosTable.id })
-                  .from(documentosTable).where(eq(documentosTable.fileKey, fileKey)).limit(1);
-                if (docInserido[0]) await updateDocumentoTexto(docInserido[0].id, texto);
-              }
-            }
-          }).catch(() => {/* ignorar erros */});
-        }
-      } else {
-        semVinculo.push(`${nomePasta}/${file.originalname}`);
-        resultados.push({
-          arquivo: file.originalname,
-          pasta: nomePasta,
-          devedorId: null,
-          devedorNome: null,
-          score: 0,
-          fileUrl: url,
-        });
-      }
+      }));
     }
 
+    const semVinculo = resultados.filter((r) => r.devedorId === null).length;
     return res.json({
       success: true,
       totalArquivos: files.length,
       vinculados: resultados.filter((r) => r.devedorId !== null).length,
-      semVinculo: semVinculo.length,
+      semVinculo,
       resultados,
     });
   } catch (err: unknown) {

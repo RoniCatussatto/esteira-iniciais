@@ -438,6 +438,7 @@ export async function gerarPeticoes(input: GerarPeticoesInput): Promise<GerarPet
   const modeloCache = new Map<string, Buffer>();
 
   try {
+    console.log(`[gerarPeticoes] Iniciando geração para lote ${input.loteId}, ${input.dadosPorDevedor.length} devedores`);
     for (const dadosDevedor of input.dadosPorDevedor) {
       const { devedorId, modeloInicial, cooperativa, contrarioNome, valoresPlaceholders } = dadosDevedor;
 
@@ -451,11 +452,13 @@ export async function gerarPeticoes(input: GerarPeticoesInput): Promise<GerarPet
           if (!modelo?.fileKey) {
             throw new Error(`Modelo "${modeloInicial}" não encontrado no banco.`);
           }
+          console.log(`[gerarPeticoes] Baixando modelo "${modeloInicial}" do S3: ${modelo.fileKey}`);
           modeloBuffer = await baixarDoS3(modelo.fileKey);
           modeloCache.set(modeloInicial, modeloBuffer);
         }
 
         // Substituir placeholders com docxtemplater
+        console.log(`[gerarPeticoes] Gerando petição para ${contrarioNome} (modelo: ${modeloInicial})`);
         const zip = new PizZip(modeloBuffer);
         const doc = new (Docxtemplater as any)(zip, {
           paragraphLoop: true,
@@ -475,7 +478,9 @@ export async function gerarPeticoes(input: GerarPeticoesInput): Promise<GerarPet
 
 
         totalGerados++;
+        console.log(`[gerarPeticoes] ✓ Petição gerada: ${nomeArquivo}.docx`);
       } catch (err: any) {
+        console.error(`[gerarPeticoes] ✗ Erro ao gerar petição para ${contrarioNome}:`, err?.message ?? err);
         erros.push({
           devedorId,
           nome: contrarioNome,
@@ -487,6 +492,7 @@ export async function gerarPeticoes(input: GerarPeticoesInput): Promise<GerarPet
     // Criar ZIP com todos os arquivos gerados
     const admZip = new AdmZip();
     const arquivos = fs.readdirSync(tmpDir);
+    console.log(`[gerarPeticoes] Criando ZIP com ${arquivos.length} arquivo(s). Total gerados: ${totalGerados}, erros: ${erros.length}`);
     for (const arquivo of arquivos) {
       const filePath = path.join(tmpDir, arquivo);
       admZip.addLocalFile(filePath);
@@ -495,6 +501,7 @@ export async function gerarPeticoes(input: GerarPeticoesInput): Promise<GerarPet
     const zipBuffer = admZip.toBuffer();
     const zipKey = `peticoes/lote-${input.loteId}-${Date.now()}.zip`;
     const { key, url } = await storagePut(zipKey, zipBuffer, 'application/zip');
+    console.log(`[gerarPeticoes] ZIP salvo no S3: ${key}`);
 
     return { zipKey: key, zipUrl: url, totalGerados, erros };
   } finally {
